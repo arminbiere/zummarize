@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <dirent.h>
 
 typedef struct Entry {
   char * path, * name;
@@ -157,8 +158,46 @@ static int zummaryneedsupdate (Zummary * z, const char * path) {
   return 1;
 }
 
+#if 0
+static int hasuffix (const char * str, const char * suffix) {
+  int i = strlen (str), j = strlen (suffix);
+  if (i < j) return 0;
+  return !strcmp (str + i - j, suffix);
+}
+#endif
+
+static char * stripsuffix (const char * str, const char * suffix) {
+  int i = strlen (str), j = strlen (suffix);
+  char * res;
+  if (i < j) return 0;
+  if (strcmp (str + i - j, suffix)) return 0;
+  res = malloc (i + 1);
+  res[i] = 0;
+  while (i-- > 0) res[i] = str[i];
+  return res;
+}
+
 static void updatezummary (Zummary * z) {
+  struct dirent * dirent;
+  DIR * dir;
   msg ("updating zummary for directory '%s'", z->path);
+  if (!(dir = opendir (z->path)))
+    die ("can not open directory '%s'", z->path);
+  z->count = 0;
+  while ((dirent = readdir (dir))) {
+    char * base, * logname;
+    msg ("checking dirent '%s'", dirent->d_name);
+    if (!(base = stripsuffix (dirent->d_name, ".err"))) continue;
+    base = stripsuffix (dirent->d_name, ".err");
+    logname = appendtopath (base, ".log");
+    if (!isfile (logname)) continue;
+    z->unknown++;
+    z->count++;
+    free (logname);
+    free (base);
+  }
+  (void) closedir (dir);
+  msg ("found %d entries in '%s'", z->count, z->path);
   updated++;
 }
 
