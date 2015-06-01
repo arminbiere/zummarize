@@ -23,6 +23,8 @@ typedef struct Zummary {
   double time, wall, mb, timelimit, spacelimit;
 } Zummary;
 
+static int verbose;
+
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
 static int loaded, written, updated;
@@ -43,8 +45,20 @@ static void die (const char * fmt, ...) {
   exit (1);
 }
 
+static void msg (const char * fmt, ...) {
+  va_list ap;
+  if (!verbose) return;
+  fflush (stderr);
+  fputs ("[zummarize] ", stderr);
+  va_start (ap, fmt);
+  vfprintf (stderr, fmt, ap);
+  va_end (ap);
+  fputc ('\n', stderr);
+  fflush (stderr);
+}
+
 static const char * USAGE =
-"usage: zummarize [-h] [ <dir> ... ]\n"
+"usage: zummarize [-h|-v] [ <dir> ... ]\n"
 ;
 
 static void usage () {
@@ -128,7 +142,11 @@ static int parseline (FILE * file) {
 
 static int loadzummary (Zummary * z, const char * path) {
   FILE * file = fopen (path, "r");
-  if (!file) return 0;
+  msg ("trying to load zummary '%s'", path);
+  if (!file) {
+    msg ("could not open zummary '%s'", path);
+    return 0;
+  }
   while (parseline (file))
     ;
   loaded++;
@@ -140,23 +158,32 @@ static int zummaryneedsupdate (Zummary * z, const char * path) {
 }
 
 static void updatezummary (Zummary * z) {
+  msg ("updating zummary for directory '%s'", z->path);
   updated++;
 }
 
 static void writezummary (Zummary * z, const char * path) {
+  msg ("writing zummary '%s'", path);
   written++;
 }
 
 static void zummarize (const char * path) {
   char * pathtozummary;
+  int update;
   Zummary * z;
   assert (isdir (path));
   z = newzummary (path);
+  msg ("zummarizing directory %s", path);
   pathtozummary = appendtopath (path, "zummary");
-  if (!isfile (pathtozummary) || 
-      !loadzummary (z, pathtozummary) ||
-      zummaryneedsupdate (z, pathtozummary))
-    updatezummary (z), writezummary (z, pathtozummary);
+  update = 1;
+  if (!isfile (pathtozummary))
+    msg ("zummary file '%s' not found", pathtozummary);
+  else if (!loadzummary (z, pathtozummary))
+    msg ("failed to load zummary '%s'", pathtozummary);
+  else if (zummaryneedsupdate (z, pathtozummary))
+    msg ("zummary '%s' needs update", pathtozummary);
+  else update = 0;
+  if (update) updatezummary (z), writezummary (z, pathtozummary);
   free (pathtozummary);
 }
 
@@ -184,13 +211,17 @@ int main (int argc, char ** argv) {
   int i, count = 0;
   for (i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "-h")) usage ();
+    else if (!strcmp (argv[i], "-v")) verbose++;
     else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
     else if (!isdir (argv[i]))
       die ("argument '%s' not a directory", argv[i]);
     else count++;
   }
   if (!count) die ("no directory specified");
-  for (i = 1; i < argc; i++) zummarize (argv[i]);
+  for (i = 1; i < argc; i++)
+    if (argv[i][0] != '-')
+      zummarize (argv[i]);
   reset ();
+  printf ("(%d loaded, %d updated, %d written)\n", loaded, updated, written);
   return 0;
 }
