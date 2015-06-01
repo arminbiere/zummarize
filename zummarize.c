@@ -46,9 +46,9 @@ static void die (const char * fmt, ...) {
   exit (1);
 }
 
-static void msg (const char * fmt, ...) {
+static void msg (int level, const char * fmt, ...) {
   va_list ap;
-  if (!verbose) return;
+  if (verbose < level) return;
   fflush (stderr);
   fputs ("[zummarize] ", stderr);
   va_start (ap, fmt);
@@ -94,6 +94,14 @@ static Zummary * newzummary (const char * path) {
     sizezummaries = newsize;
   }
   zummaries[nzummaries++] = res;
+  return res;
+}
+
+static char * appendstr (const char * a, const char * b) {
+  int i = strlen (a), j = strlen (b);
+  char * res = malloc (i + j + 1);
+  strcpy (res, a);
+  strcpy (res + i, b);
   return res;
 }
 
@@ -143,9 +151,9 @@ static int parseline (FILE * file) {
 
 static int loadzummary (Zummary * z, const char * path) {
   FILE * file = fopen (path, "r");
-  msg ("trying to load zummary '%s'", path);
+  msg (1, "trying to load zummary '%s'", path);
   if (!file) {
-    msg ("could not open zummary '%s'", path);
+    msg (1, "could not open zummary '%s'", path);
     return 0;
   }
   while (parseline (file))
@@ -167,42 +175,49 @@ static int hasuffix (const char * str, const char * suffix) {
 #endif
 
 static char * stripsuffix (const char * str, const char * suffix) {
-  int i = strlen (str), j = strlen (suffix);
+  int i = strlen (str), j = strlen (suffix), k;
   char * res;
   if (i < j) return 0;
-  if (strcmp (str + i - j, suffix)) return 0;
-  res = malloc (i + 1);
-  res[i] = 0;
-  while (i-- > 0) res[i] = str[i];
+  k = i - j;
+  if (strcmp (str + k, suffix)) return 0;
+  res = malloc (k + 1);
+  res[k] = 0;
+  while (k-- > 0) res[k] = str[k];
   return res;
 }
 
 static void updatezummary (Zummary * z) {
   struct dirent * dirent;
   DIR * dir;
-  msg ("updating zummary for directory '%s'", z->path);
+  msg (1, "updating zummary for directory '%s'", z->path);
   if (!(dir = opendir (z->path)))
     die ("can not open directory '%s'", z->path);
   z->count = 0;
   while ((dirent = readdir (dir))) {
-    char * base, * logname;
-    msg ("checking dirent '%s'", dirent->d_name);
-    if (!(base = stripsuffix (dirent->d_name, ".err"))) continue;
+    char * base, * logname, * logpath;
+    msg (3, "checking '%s'", dirent->d_name);
+    if (!(base = stripsuffix (dirent->d_name, ".err"))) {
+      msg (3, "skipping '%s'", dirent->d_name);
+      continue;
+    }
     base = stripsuffix (dirent->d_name, ".err");
-    logname = appendtopath (base, ".log");
-    if (!isfile (logname)) continue;
-    z->unknown++;
-    z->count++;
+    logname = appendstr (base, ".log");
+    logpath = appendtopath (z->path, logname);
+    if (isfile (logpath)) {
+      z->unknown++;
+      z->count++;
+    } else msg (3, "missing '%s'", logpath);
+    free (logpath);
     free (logname);
     free (base);
   }
   (void) closedir (dir);
-  msg ("found %d entries in '%s'", z->count, z->path);
+  msg (1, "found %d entries in '%s'", z->count, z->path);
   updated++;
 }
 
 static void writezummary (Zummary * z, const char * path) {
-  msg ("writing zummary '%s'", path);
+  msg (1, "writing zummary '%s'", path);
   written++;
 }
 
@@ -212,15 +227,15 @@ static void zummarize (const char * path) {
   Zummary * z;
   assert (isdir (path));
   z = newzummary (path);
-  msg ("zummarizing directory %s", path);
+  msg (1, "zummarizing directory %s", path);
   pathtozummary = appendtopath (path, "zummary");
   update = 1;
   if (!isfile (pathtozummary))
-    msg ("zummary file '%s' not found", pathtozummary);
+    msg (1, "zummary file '%s' not found", pathtozummary);
   else if (!loadzummary (z, pathtozummary))
-    msg ("failed to load zummary '%s'", pathtozummary);
+    msg (1, "failed to load zummary '%s'", pathtozummary);
   else if (zummaryneedsupdate (z, pathtozummary))
-    msg ("zummary '%s' needs update", pathtozummary);
+    msg (1, "zummary '%s' needs update", pathtozummary);
   else update = 0;
   if (update) updatezummary (z), writezummary (z, pathtozummary);
   free (pathtozummary);
@@ -261,6 +276,6 @@ int main (int argc, char ** argv) {
     if (argv[i][0] != '-')
       zummarize (argv[i]);
   reset ();
-  printf ("(%d loaded, %d updated, %d written)\n", loaded, updated, written);
+  msg (1, "%d loaded, %d updated, %d written", loaded, updated, written);
   return 0;
 }
