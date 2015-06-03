@@ -13,16 +13,16 @@ typedef struct Entry {
   char * name;
   struct Zummary * zummary;
   struct Entry * next;
-  double time, wall, mb;
-  char timeout, memout;
+  double time, real, space;
+  char timeout, memout, unknown;
   int res;
 } Entry;
 
 typedef struct Zummary {
   char * path;
   Entry * first, * last;
-  int count, sat, unsat, unknown, memout, timeout;
-  double time, wall, mb, timelimit, spacelimit;
+  int count, sat, unsat, memout, timeout, unknown;
+  double time, real, space, tlim, rlim, slim;
 } Zummary;
 
 static int verbose;
@@ -88,7 +88,7 @@ static Zummary * newzummary (const char * path) {
   Zummary * res = malloc (sizeof *res);
   memset (res, 0, sizeof *res);
   res->path = strdup (path);
-  res->timelimit = res->spacelimit = -1;
+  res->tlim = res->rlim = res->slim = -1;
   stripleadingslash (res->path);
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
@@ -131,6 +131,7 @@ static void pushtoken () {
 }
 
 static int parseline (FILE * file) {
+  int i;
   while (ntokens > 0) free (tokens[--ntokens]);
   ntoken = 0;
   for (;;) {
@@ -148,6 +149,9 @@ static int parseline (FILE * file) {
     token[ntoken++] = ch;
   }
   if (ntoken) pushtoken ();
+  if (verbose > 3)
+    for (i = 0; i < ntokens; i++)
+      msg (4, "token[%d] %s", i, tokens[i]);
   return ntokens;
 }
 
@@ -168,14 +172,6 @@ static int zummaryneedsupdate (Zummary * z, const char * path) {
   return 1;
 }
 
-#if 0
-static int hasuffix (const char * str, const char * suffix) {
-  int i = strlen (str), j = strlen (suffix);
-  if (i < j) return 0;
-  return !strcmp (str + i - j, suffix);
-}
-#endif
-
 static char * stripsuffix (const char * str, const char * suffix) {
   int i = strlen (str), j = strlen (suffix), k;
   char * res;
@@ -193,6 +189,166 @@ static Entry * newentry (Zummary * z, const char * name) {
   memset (res, 0, sizeof *res);
   res->zummary = z;
   res->name = strdup (name);
+  return res;
+}
+
+enum {
+  TLIM   = 0,
+  RLIM   = 1,
+  SLIM   = 2,
+  STATUS = 3,
+  RESULT = 4,
+  TIME   = 5,
+  WALL   = 6,
+  SPACE  = 7,
+  MAX    = 8,
+};
+
+#define FOUND(FIELD,STR) \
+do { \
+  checked++; \
+  if (found[FIELD]) break; \
+  msg (1, \
+    "error file '%s' is missing '%s' line", \
+    errpath, STR); \
+  res = 0; \
+} while (0)
+
+static int parserrfile (Entry * e, const char * errpath) {
+  FILE * file = fopen (errpath, "r");
+  int found[MAX], i, checked, res = 1;
+  if (!file) die ("can not read '%s'", errpath);
+  for (i = 0; i < MAX; i++) found[i] = 0;
+  while (parseline (file)) {
+    if (!ntokens) continue;
+    if (strcmp (tokens[0], "[runlim]") &&
+        strcmp (tokens[0], "[run]"))
+      continue;
+    if (ntokens > 2 &&
+        !strcmp (tokens[1], "status:")) {
+      if (found[STATUS]) {
+	msg (1, "error file '%s' contains two 'status:' lines", errpath);
+	res = 0;
+      } else if (!strcmp (tokens[2], "ok")) {
+	msg (3, "found 'ok' status in '%s'", errpath);
+	found[STATUS] = 1;
+      } else if (ntokens > 4 &&
+                 !strcmp (tokens[2], "out") &&
+		 !strcmp (tokens[3], "of") &&
+		 !strcmp (tokens[4], "time")) {
+	msg (3, "found 'out of time' status in '%s'", errpath);
+	found[STATUS] = 1;
+	e->timeout = 1;
+	res = 0;
+      } else if (ntokens > 4 &&
+                 !strcmp (tokens[2], "out") &&
+		 !strcmp (tokens[3], "of") &&
+		 !strcmp (tokens[4], "memory")) {
+	msg (3, "found 'out of memory' status in '%s'", errpath);
+	found[STATUS] = 1;
+	e->memout = 1;
+	res = 0;
+      } else {
+	msg (3, "invalid status '%s' in '%s'", tokens[2], errpath);
+	found[STATUS] = 1;
+	e->unknown = 1;
+	res = 0;
+      }
+    } else if (ntokens > 3 &&
+	       !strcmp (tokens[1], "time") &&
+	       !strcmp (tokens[2], "limit:")) {
+      if (found[TLIM]) {
+	msg (1,
+	  "error file '%s' contains two 'time limit:' lines",
+	  errpath);
+	res = 0;
+      } else {
+	double tlim = atof (tokens[3]);
+	found[TLIM] = 1;
+	msg (3, "error file '%s' time limit '%f'", errpath, tlim);
+	if (tlim <= 0) {
+	  msg (1,
+	    "error file '%s' with invalid time limit '%f'",
+	    errpath, tlim);
+	  res = 0;
+	} else if (e->zummary->tlim < 0) {
+	  msg (1, "assuming time limit '%.0f'", tlim);
+	  e->zummary->tlim = tlim;
+	} else if (e->zummary->tlim != tlim) {
+	  msg (1,
+	    "error file '%s' with different time limit '%f'",
+	    errpath, tlim);
+	  res = 0;
+	}
+      }
+    } else if (ntokens > 4 &&
+	       !strcmp (tokens[1], "real") &&
+	       !strcmp (tokens[2], "time") &&
+	       !strcmp (tokens[3], "limit:")) {
+      if (found[RLIM]) {
+	msg (1,
+	  "error file '%s' contains two 'real time limit:' lines",
+	  errpath);
+	res = 0;
+      } else {
+	double rlim = atof (tokens[4]);
+	found[RLIM] = 1;
+	msg (3, "error file '%s' real time limit '%f'", errpath, rlim);
+	if (rlim <= 0) {
+	  msg (1,
+	    "error file '%s' with invalid real time limit '%f'",
+	    errpath, rlim);
+	  res = 0;
+	} else if (e->zummary->rlim < 0) {
+	  msg (1, "assuming real time limit '%.0f'", rlim);
+	  e->zummary->rlim = rlim;
+	} else if (e->zummary->rlim != rlim) {
+	  msg (1,
+	    "error file '%s' with different real time limit '%f'",
+	    errpath, rlim);
+	  res = 0;
+	}
+      }
+    } else if (ntokens > 3 &&
+	       !strcmp (tokens[1], "space") &&
+	       !strcmp (tokens[2], "limit:")) {
+      if (found[SLIM]) {
+	msg (1,
+	  "error file '%s' contains two 'space limit:' lines",
+	  errpath);
+	res = 0;
+      } else {
+	double slim = atof (tokens[3]);
+	found[SLIM] = 1;
+	msg (3, "error file '%s' space limit '%f'", errpath, slim);
+	if (slim <= 0) {
+	  msg (1,
+	    "error file '%s' with invalid space limit '%f'",
+	    errpath, slim);
+	  res = 0;
+	} else if (e->zummary->slim < 0) {
+	  msg (1, "assuming space limit '%.0f'", slim);
+	  e->zummary->slim = slim;
+	} else if (e->zummary->slim != slim) {
+	  msg (1,
+	    "error file '%s' with different space limit '%f'",
+	    errpath, slim);
+	  res = 0;
+	}
+      }
+    }
+  }
+  fclose (file);
+  checked = 0;
+  FOUND (TLIM,   "time limit:");
+  FOUND (RLIM,   "real time limit:");
+  FOUND (SLIM,   "space limit:");
+  FOUND (STATUS, "status:");
+  FOUND (RESULT, "result:");
+  FOUND (TIME,   "time:");
+  FOUND (WALL,   "real:");
+  FOUND (SPACE,  "space:");
+  assert (checked == MAX);
   return res;
 }
 
@@ -221,7 +377,11 @@ static void updatezummary (Zummary * z) {
       if (z->last) z->last->next = e;
       else z->first = e;
       z->last = e;
-      z->unknown++;
+      if (parserrfile (e, errpath)) {
+      } else {
+	assert (!e->res);
+	z->unknown++;
+      }
       free (errpath);
     } else msg (3, "missing '%s'", logpath);
     free (logpath);
