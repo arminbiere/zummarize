@@ -132,14 +132,13 @@ static void pushtoken () {
 }
 
 static int parseline (FILE * file) {
-  int i;
-  msg (3, "line[%d]", lineno);
+  int i, newline = 0;
   while (ntokens > 0) free (tokens[--ntokens]);
   ntoken = 0;
   for (;;) {
     int ch = getc (file);
     if (ch == EOF) break;
-    if (ch == '\n') { lineno++; break; }
+    if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
       if (ntoken) pushtoken ();
       continue;
@@ -154,7 +153,8 @@ static int parseline (FILE * file) {
   if (ntoken) pushtoken ();
   if (verbose > 2)
     for (i = 0; i < ntokens; i++)
-      msg (3, "token[%d] %s", i, tokens[i]);
+      msg (3, "token[%d,%d] %s", lineno, i, tokens[i]);
+  if (newline) lineno++;
   return ntokens;
 }
 
