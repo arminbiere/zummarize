@@ -25,7 +25,7 @@ typedef struct Zummary {
   double time, real, space, tlim, rlim, slim;
 } Zummary;
 
-static int verbose;
+static int verbose, force;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -33,6 +33,7 @@ static int loaded, written, updated;
 
 static char * token;
 static int ntoken, sizetoken;
+static int lineno;
 
 static char ** tokens;
 static int ntokens, sizetokens;
@@ -60,7 +61,7 @@ static void msg (int level, const char * fmt, ...) {
 }
 
 static const char * USAGE =
-"usage: zummarize [-h|-v] [ <dir> ... ]\n"
+"usage: zummarize [-h|-v|-f] [ <dir> ... ]\n"
 ;
 
 static void usage () {
@@ -132,11 +133,13 @@ static void pushtoken () {
 
 static int parseline (FILE * file) {
   int i;
+  msg (3, "line[%d]", lineno);
   while (ntokens > 0) free (tokens[--ntokens]);
   ntoken = 0;
   for (;;) {
     int ch = getc (file);
-    if (ch == EOF || ch == '\n') break;
+    if (ch == EOF) break;
+    if (ch == '\n') { lineno++; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
       if (ntoken) pushtoken ();
       continue;
@@ -149,9 +152,9 @@ static int parseline (FILE * file) {
     token[ntoken++] = ch;
   }
   if (ntoken) pushtoken ();
-  if (verbose > 3)
+  if (verbose > 2)
     for (i = 0; i < ntokens; i++)
-      msg (4, "token[%d] %s", i, tokens[i]);
+      msg (3, "token[%d] %s", i, tokens[i]);
   return ntokens;
 }
 
@@ -162,6 +165,7 @@ static int loadzummary (Zummary * z, const char * path) {
     msg (1, "could not open zummary '%s'", path);
     return 0;
   }
+  lineno = 1;
   while (parseline (file))
     ;
   loaded++;
@@ -219,6 +223,7 @@ static int parserrfile (Entry * e, const char * errpath) {
   int found[MAX], i, checked, res = 1;
   if (!file) die ("can not read '%s'", errpath);
   for (i = 0; i < MAX; i++) found[i] = 0;
+  lineno = 1;
   while (parseline (file)) {
     if (!ntokens) continue;
     if (strcmp (tokens[0], "[runlim]") &&
@@ -228,7 +233,7 @@ static int parserrfile (Entry * e, const char * errpath) {
        !strcmp (tokens[1], "time") &&
        !strcmp (tokens[2], "limit:")) {
       double tlim = atof (tokens[3]);
-      msg (3, "found time limit '%.0f' in '%s'", tlim, errpath);
+      msg (2, "found time limit '%.0f' in '%s'", tlim, errpath);
       if (found[TLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'time limit:' lines",
@@ -256,7 +261,7 @@ static int parserrfile (Entry * e, const char * errpath) {
 	       !strcmp (tokens[2], "time") &&
 	       !strcmp (tokens[3], "limit:")) {
       double rlim = atof (tokens[4]);
-      msg (3, "found real time limit '%.0f' in '%s'", rlim, errpath);
+      msg (2, "found real time limit '%.0f' in '%s'", rlim, errpath);
       if (found[RLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'real time limit:' lines",
@@ -283,7 +288,7 @@ static int parserrfile (Entry * e, const char * errpath) {
 	       !strcmp (tokens[1], "space") &&
 	       !strcmp (tokens[2], "limit:")) {
       double slim = atof (tokens[3]);
-      msg (3, "found space limit '%.0f' in '%s'", slim, errpath);
+      msg (2, "found space limit '%.0f' in '%s'", slim, errpath);
       if (found[SLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'space limit:' lines",
@@ -312,13 +317,13 @@ static int parserrfile (Entry * e, const char * errpath) {
 	msg (1, "error file '%s' contains two 'status:' lines", errpath);
 	res = 0;
       } else if (!strcmp (tokens[2], "ok")) {
-	msg (3, "found 'ok' status in '%s'", errpath);
+	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
       } else if (ntokens > 4 &&
 		 !strcmp (tokens[2], "out") &&
 		 !strcmp (tokens[3], "of") &&
 		 !strcmp (tokens[4], "time")) {
-	msg (3, "found 'out of time' status in '%s'", errpath);
+	msg (2, "found 'out of time' status in '%s'", errpath);
 	found[STATUS] = 1;
 	e->timeout = 1;
 	res = 0;
@@ -326,7 +331,7 @@ static int parserrfile (Entry * e, const char * errpath) {
 		 !strcmp (tokens[2], "out") &&
 		 !strcmp (tokens[3], "of") &&
 		 !strcmp (tokens[4], "memory")) {
-	msg (3, "found 'out of memory' status in '%s'", errpath);
+	msg (2, "found 'out of memory' status in '%s'", errpath);
 	found[STATUS] = 1;
 	e->memout = 1;
 	res = 0;
@@ -345,23 +350,23 @@ static int parserrfile (Entry * e, const char * errpath) {
 	int result = atoi (tokens[2]);
 	found[RESULT] = 1;
 	if (!result) {
-	  msg (3, "found '0' result in '%s'", errpath);
+	  msg (2, "found '0' result in '%s'", errpath);
 	  e->res = 0;
 	} else if (result == 10) {
-	  msg (3, "found '10' (SAT) result in '%s'", errpath);
+	  msg (2, "found '10' (SAT) result in '%s'", errpath);
 	  e->res = 10;
 	} else if (result == 20) {
-	  msg (3, "found '20' (UNSAT) result in '%s'", errpath);
+	  msg (2, "found '20' (UNSAT) result in '%s'", errpath);
 	  e->res = 20;
 	} else {
-	  msg (3, "found invalid '%d' result in '%s'", result, errpath);
+	  msg (2, "found invalid '%d' result in '%s'", result, errpath);
 	  e->res = result;
 	}
       }
     } else if (ntokens > 2 &&
                !strcmp (tokens[1], "time:")) {
       double time = atof (tokens[2]);
-      msg (3, "found time '%.2f' in '%s'", time, errpath);
+      msg (2, "found time '%.2f' in '%s'", time, errpath);
       if (found[TIME]) {
 	msg (1, "error file '%s' contains two 'time:' lines", errpath);
 	res = 0;
@@ -375,7 +380,7 @@ static int parserrfile (Entry * e, const char * errpath) {
     } else if (ntokens > 2 &&
                !strcmp (tokens[1], "real:")) {
       double real = atof (tokens[2]);
-      msg (3, "found real time '%.2f' in '%s'", real, errpath);
+      msg (2, "found real time '%.2f' in '%s'", real, errpath);
       if (found[REAL]) {
 	msg (1, "error file '%s' contains two 'real:' lines", errpath);
 	res = 0;
@@ -389,12 +394,12 @@ static int parserrfile (Entry * e, const char * errpath) {
     } else if (ntokens > 2 &&
                !strcmp (tokens[1], "space:")) {
       double space = atof (tokens[2]);
-      msg (3, "found space '%.1f' in '%s'", space, errpath);
-      if (found[REAL]) {
+      msg (2, "found space '%.1f' in '%s'", space, errpath);
+      if (found[SPACE]) {
 	msg (1, "error file '%s' contains two 'space:' lines", errpath);
 	res = 0;
       } else {
-	found[REAL] = 1;
+	found[SPACE] = 1;
 	if (space < 0) {
 	  msg (1, "invalid space '%.1f' in '%s'", space, errpath);
 	  res = 0;
@@ -426,9 +431,9 @@ static void updatezummary (Zummary * z) {
   while ((dirent = readdir (dir))) {
     char * base, * logname, * logpath;
     const char * errname = dirent->d_name;
-    msg (3, "checking '%s'", errname);
+    msg (2, "checking '%s'", errname);
     if (!(base = stripsuffix (errname, ".err"))) {
-      msg (3, "skipping '%s'", errname);
+      msg (2, "skipping '%s'", errname);
       continue;
     }
     logname = appendstr (base, ".log");
@@ -446,7 +451,7 @@ static void updatezummary (Zummary * z) {
       else if (e->res == 20) z->unsat++;
       else z->unknown++;
       free (errpath);
-    } else msg (3, "missing '%s'", logpath);
+    } else msg (2, "missing '%s'", logpath);
     free (logpath);
     free (logname);
     free (base);
@@ -472,6 +477,8 @@ static void zummarize (const char * path) {
   update = 1;
   if (!isfile (pathtozummary))
     msg (1, "zummary file '%s' not found", pathtozummary);
+  else if (force)
+    msg (1, "forcing update of '%s' (through '-f' option)", pathtozummary);
   else if (!loadzummary (z, pathtozummary))
     msg (1, "failed to load zummary '%s'", pathtozummary);
   else if (zummaryneedsupdate (z, pathtozummary))
@@ -505,6 +512,7 @@ int main (int argc, char ** argv) {
   for (i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
+    else if (!strcmp (argv[i], "-f")) force++;
     else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
     else if (!isdir (argv[i]))
       die ("argument '%s' not a directory", argv[i]);
