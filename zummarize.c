@@ -10,7 +10,8 @@
 #include <dirent.h>
 
 typedef struct Entry {
-  char * path, * name;
+  char * name;
+  struct Zummary * zummary;
   struct Entry * next;
   double time, wall, mb;
   char timeout, memout;
@@ -87,6 +88,7 @@ static Zummary * newzummary (const char * path) {
   Zummary * res = malloc (sizeof *res);
   memset (res, 0, sizeof *res);
   res->path = strdup (path);
+  res->timelimit = res->spacelimit = -1;
   stripleadingslash (res->path);
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
@@ -186,6 +188,14 @@ static char * stripsuffix (const char * str, const char * suffix) {
   return res;
 }
 
+static Entry * newentry (Zummary * z, const char * name) {
+  Entry * res = malloc (sizeof *res);
+  memset (res, 0, sizeof *res);
+  res->zummary = z;
+  res->name = strdup (name);
+  return res;
+}
+
 static void updatezummary (Zummary * z) {
   struct dirent * dirent;
   DIR * dir;
@@ -195,17 +205,24 @@ static void updatezummary (Zummary * z) {
   z->count = 0;
   while ((dirent = readdir (dir))) {
     char * base, * logname, * logpath;
-    msg (3, "checking '%s'", dirent->d_name);
-    if (!(base = stripsuffix (dirent->d_name, ".err"))) {
-      msg (3, "skipping '%s'", dirent->d_name);
+    const char * errname = dirent->d_name;
+    msg (3, "checking '%s'", errname);
+    if (!(base = stripsuffix (errname, ".err"))) {
+      msg (3, "skipping '%s'", errname);
       continue;
     }
-    base = stripsuffix (dirent->d_name, ".err");
     logname = appendstr (base, ".log");
     logpath = appendtopath (z->path, logname);
     if (isfile (logpath)) {
-      z->unknown++;
+      char * errpath = appendtopath (z->path, errname);
+      Entry * e = newentry (z, base);
+      assert (isfile (errpath));
       z->count++;
+      if (z->last) z->last->next = e;
+      else z->first = e;
+      z->last = e;
+      z->unknown++;
+      free (errpath);
     } else msg (3, "missing '%s'", logpath);
     free (logpath);
     free (logname);
@@ -248,7 +265,6 @@ static void reset () {
     Entry * e, * n;
     for (e = z->first; e; e = n) {
       n = e->next;
-      free (e->path);
       free (e->name);
       free (e);
     }
