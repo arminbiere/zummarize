@@ -1,4 +1,4 @@
 all:
-	gcc -Wall -g -o zummarize zummarize.c
+	gcc -Wall -O3 -DNDEBUG -o zummarize zummarize.c
 clean:
 	rm -f zummarize

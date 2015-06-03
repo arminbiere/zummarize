@@ -10,10 +10,16 @@
 #include <dirent.h>
 #include <limits.h>
 
-typedef struct Entry {
+typedef struct Symbol {
   char * name;
+  struct Entry * first, * last;
+  struct Symbol * next;
+} Symbol;
+
+typedef struct Entry {
+  const char * name;
   struct Zummary * zummary;
-  struct Entry * next;
+  struct Entry * next, * chain;
   double time, real, space;
   char timeout, memout, unknown;
   int res;
@@ -26,7 +32,7 @@ typedef struct Zummary {
   double time, real, space, tlim, rlim, slim;
 } Zummary;
 
-static int verbose, force;
+static int verbose, force, nowrite;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -38,6 +44,12 @@ static int lineno;
 
 static char ** tokens;
 static int ntokens, sizetokens;
+
+static Symbol ** symtab;
+static unsigned nsyms, sizesymtab;
+static unsigned long long searches, collisions;
+
+static int usereal;
 
 static void die (const char * fmt, ...) {
   va_list ap;
@@ -62,7 +74,7 @@ static void msg (int level, const char * fmt, ...) {
 }
 
 static const char * USAGE =
-"usage: zummarize [-h|-v|-f] [ <dir> ... ]\n"
+"usage: zummarize [-h|-v|-f|--no-write] [ <dir> ... ]\n"
 ;
 
 static void usage () {
@@ -80,7 +92,7 @@ static int isfile (const char * path) {
   return !stat (path, &buf) && S_ISREG (buf.st_mode);
 }
 
-static void stripleadingslash (char * str) {
+static void striptrailingslash (char * str) {
   int i = strlen (str);
   while (i > 0 && str[i-1] == '/')
     str[--i] = 0;
@@ -93,7 +105,7 @@ static Zummary * newzummary (const char * path) {
   res->path = strdup (path);
   if (!res->path) die ("out of memory copy zummary path");
   res->tlim = res->rlim = res->slim = -1;
-  stripleadingslash (res->path);
+  striptrailingslash (res->path);
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
     zummaries = realloc (zummaries, newsize * sizeof *zummaries);
@@ -112,11 +124,11 @@ static char * appendstr (const char * a, const char * b) {
   return res;
 }
 
-static char * appenpath (const char * prefix, const char * name) {
+static char * appendpath (const char * prefix, const char * name) {
   char * res = malloc (strlen (prefix) + strlen (name) + 2);
   if (!res) die ("out of memory appending path");
   strcpy (res, prefix);
-  stripleadingslash (res);
+  striptrailingslash (res);
   strcat (res, "/");
   strcat (res, name);
   return res;
@@ -207,13 +219,67 @@ static char * stripsuffix (const char * str, const char * suffix) {
   return res;
 }
 
+static unsigned primes[] = { 111111113, 222222227, 333333349, 444444457 };
+
+#define NPRIMES (sizeof primes/sizeof primes[0])
+
+static unsigned hashstr (const char * name) {
+  unsigned res = 0, i = 0;
+  const char * p;
+  char ch;
+  for (p = name; (ch = *p); p++) {
+    res += primes[i++] * (unsigned) ch;
+    if (i == NPRIMES) i = 0;
+  }
+  return res;
+}
+
+static void enlarge () {
+  unsigned newsizesymtab = sizesymtab ? 2*sizesymtab : 1;
+  Symbol *s, *n, ** newsymtab;
+  unsigned h, i;
+  size_t bytes = newsizesymtab * sizeof *newsymtab;
+  newsymtab = malloc (bytes);
+  if (!newsymtab) die ("out of memory reallocating symbol table");
+  memset (newsymtab, 0, bytes);
+  for (i = 0; i < sizesymtab; i++) {
+    for (s = symtab[i]; s; s = n) {
+      n = s->next;
+      h = hashstr (s->name) & (newsizesymtab - 1);
+      s->next = newsymtab[h];
+      newsymtab[h] = s;
+    }
+  }
+  free (symtab);
+  symtab = newsymtab;
+  sizesymtab = newsizesymtab;
+}
+
 static Entry * newentry (Zummary * z, const char * name) {
   Entry * res = malloc (sizeof *res);
+  Symbol * s, ** p;
+  unsigned h;
   if (!res) die ("out of memory allocating entry object");
   memset (res, 0, sizeof *res);
   res->zummary = z;
-  res->name = strdup (name);
-  if (!res->name) die ("out of memory copying entry name");
+  if (nsyms == sizesymtab) enlarge ();
+  h = hashstr (name) & (sizesymtab - 1);
+  searches++;
+  for (p = symtab + h; (s = *p) && strcmp (s->name, name); p = &s->next)
+    collisions++;
+  if (!s) {
+    s = malloc (sizeof *s);
+    if (!s) die ("out of memory allocating symbol object");
+    memset (s, 0, sizeof *s);
+    s->name = strdup (name);
+    if (!s->name) die ("out of memory copying symbol name");
+    nsyms++;
+    *p = s;
+  }
+  res->name = s->name;
+  if (s->last) s->last->chain = res;
+  else s->first = res;
+  s->last = res;
   return res;
 }
 
@@ -564,9 +630,9 @@ static void updatezummary (Zummary * z) {
       continue;
     }
     logname = appendstr (base, ".log");
-    logpath = appenpath (z->path, logname);
+    logpath = appendpath (z->path, logname);
     if (isfile (logpath)) {
-      char * errpath = appenpath (z->path, errname);
+      char * errpath = appendpath (z->path, errname);
       e = newentry (z, base);
       assert (isfile (errpath));
       z->count++;
@@ -651,6 +717,7 @@ static void writezummary (Zummary * z, const char * path) {
   Entry * e;
   file = fopen ("/tmp/zummary", "w");		// TODO set this to path
   if (!file) die ("can not write '%s'", path);
+  fputs (" result time real space\n", file);
   for (e = z->first; e; e = e->next)
     fprintf (file,
       "%s %d %.2f %.2f %.1f\n",
@@ -660,14 +727,14 @@ static void writezummary (Zummary * z, const char * path) {
   written++;
 }
 
-static void zummarize (const char * path) {
+static void zummarizeone (const char * path) {
   char * pathtozummary;
   int update;
   Zummary * z;
   assert (isdir (path));
   z = newzummary (path);
   msg (1, "zummarizing directory %s", path);
-  pathtozummary = appenpath (path, "zummary");
+  pathtozummary = appendpath (path, "zummary");
   update = 1;
   if (!isfile (pathtozummary))
     msg (1, "zummary file '%s' not found", pathtozummary);
@@ -678,8 +745,150 @@ static void zummarize (const char * path) {
   else if (zummaryneedsupdate (z, pathtozummary))
     msg (1, "zummary '%s' needs update", pathtozummary);
   else update = 0;
-  if (update) updatezummary (z), writezummary (z, pathtozummary);
+  if (update) {
+    updatezummary (z);
+    if (!nowrite) writezummary (z, pathtozummary);
+  }
   free (pathtozummary);
+}
+
+static int cmpsyms4qsort (const void * p, const void * q) {
+  Symbol * s = * (Symbol**) p, * t = *(Symbol **) q;
+  return strcmp (s->name, t->name);
+}
+
+static void sortsymbols () {
+  Symbol * p = 0, * s, * n;
+  int i;
+  for (i = 0; i < sizesymtab; i++)
+    for (s = symtab[i]; s; s = n)
+      n = s->next, s->next = p, p = s;
+  for (i = 0; p; p = p->next)
+    symtab[i++] = p;
+  assert (i == nsyms);
+  qsort (symtab, nsyms, sizeof *symtab, cmpsyms4qsort);
+  msg (2, "sorted %d symbols", nsyms);
+}
+
+static void discrepancies () {
+  int i;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    int sat = 0, unsat = 0;
+    Entry * e;
+    for (e = s->first; e; e = e->chain) {
+      assert (e->name == s->name);
+      if (e->res == 10) sat++;
+      if (e->res == 20) unsat++;
+    }
+    if (!sat) continue;
+    if (!unsat) continue;
+    fflush (stdout);
+    fprintf (stderr,
+      "*** zummarize: discrepancy on '%s' with %d SAT and %d UNSAT\n",
+      s->name, sat, unsat);
+    for (e = s->first; e; e = e->chain) {
+      if (e->res < 10) continue;
+      assert (e->res == 10 || e->res == 20);
+      fprintf (stderr,
+        "*** zummarize: '%s/%s' %s\n",
+	e->zummary->path, s->name, 
+	(e->res == 10 ? "SAT" : "UNSAT"));
+    }
+    fflush (stderr);
+    exit (1);
+  }
+  msg (1, "no discrepancies found");
+}
+
+static void checklimits () {
+  Zummary * y, * z;
+  int i;
+  if (nzummaries <= 1) return;
+  y = zummaries[0];
+  for (i = 1; i < nzummaries; i++) {
+    z = zummaries[i];
+    if (y->tlim != z->tlim)
+      die ("different time limit in '%s' and '%s'", y->path, z->path);
+    if (y->rlim != z->rlim)
+      die ("different real time limit in '%s' and '%s'", y->path, z->path);
+    if (y->slim != z->slim)
+      die ("different space limit in '%s' and '%s'", y->path, z->path);
+  }
+  msg (1, "all zummaries have the same time and space limits");
+  if (y->tlim >= y->rlim) {
+    msg (1, "zummarizing over real time (not process time)");
+    usereal = 1;
+  } else {
+    msg (1, "zummarizing over process time (not real time)");
+    usereal = 0;
+  }
+}
+
+static int cmpdouble (double a, double b) {
+  if (a < b) return -1;
+  if (b < a) return 1;
+  return 0;
+}
+
+static int cmpzummaries4qsort (const void * p, const void * q) {
+  Zummary * y = * (Zummary**) p, * z = * (Zummary**) q;
+  int a = y->sat + y->unsat, b = z->sat + z->unsat;
+  int res = b - a;
+  if (res) return res;
+  if (usereal) {
+    if ((res = cmpdouble (y->real, z->real))) return res;
+    if ((res = cmpdouble (y->time, z->time))) return res;
+  } else {
+    if ((res = cmpdouble (y->time, z->time))) return res;
+    if ((res = cmpdouble (y->real, z->real))) return res;
+  }
+  if ((res = cmpdouble (y->space, z->space))) return res;
+  return strcmp (y->path, z->path);
+}
+
+static void sortzummaries () {
+  qsort (zummaries, nzummaries, sizeof *zummaries, cmpzummaries4qsort);
+  msg (2, "sorted all zummaries");
+}
+
+static void printsummaries () {
+  char fmt[20];
+  int len = 0, i;
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    int tmp = strlen (z->path);
+    if (tmp > len) len = tmp;
+  }
+  sprintf (fmt, "%%%ds", len);
+  printf (fmt, "");
+  printf (" %5s %5s %5s %5s %5s %3s %3s %3s %7s %7s %7s\n",
+    "count", "solve", "sat", "unsat", "fail", "to", "mo", "uo",
+    "time", "real", "space");
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    int solved = z->sat + z->unsat;
+    int failed = z->timeout + z->memout + z->unknown;
+    assert (solved + failed == z->count);
+    printf (fmt, z->path);
+    printf (" %5d %5d %5d %5d %5d %3d %3d %3d %7.0f %7.0f %7.0f\n",
+      z->count,
+      solved, z->sat, z->unsat,
+      failed, z->timeout, z->memout, z->unknown,
+      z->time, z->real, z->space);
+  }
+}
+
+static void zummarizeall () {
+  msg (2,
+    "%u benchmarks (%llu searched, %llu collisions %.2f on average)",
+    nsyms, searches, collisions,
+    searches ? collisions/(double)searches : 1.0);
+  sortsymbols ();
+  discrepancies ();
+  checklimits ();
+  sortzummaries ();
+  printsummaries ();
 }
 
 static void reset () {
@@ -689,7 +898,6 @@ static void reset () {
     Entry * e, * n;
     for (e = z->first; e; e = n) {
       n = e->next;
-      free (e->name);
       free (e);
     }
     free (z->path);
@@ -699,6 +907,12 @@ static void reset () {
   for (i = 0; i < ntokens; i++) free (tokens[i]);
   free (tokens);
   free (token);
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    free (s->name);
+    free (s);
+  }
+  free (symtab);
 }
 
 int main (int argc, char ** argv) {
@@ -707,6 +921,7 @@ int main (int argc, char ** argv) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
     else if (!strcmp (argv[i], "-f")) force++;
+    else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
     else if (!isdir (argv[i]))
       die ("argument '%s' not a directory", argv[i]);
@@ -715,7 +930,8 @@ int main (int argc, char ** argv) {
   if (!count) die ("no directory specified");
   for (i = 1; i < argc; i++)
     if (argv[i][0] != '-')
-      zummarize (argv[i]);
+      zummarizeone (argv[i]);
+  zummarizeall ();
   reset ();
   msg (1, "%d loaded, %d updated, %d written", loaded, updated, written);
   return 0;
