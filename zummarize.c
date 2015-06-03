@@ -199,7 +199,7 @@ enum {
   STATUS = 3,
   RESULT = 4,
   TIME   = 5,
-  WALL   = 6,
+  REAL   = 6,
   SPACE  = 7,
   MAX    = 8,
 };
@@ -227,15 +227,15 @@ static int parserrfile (Entry * e, const char * errpath) {
     if (ntokens > 3 &&
        !strcmp (tokens[1], "time") &&
        !strcmp (tokens[2], "limit:")) {
+      double tlim = atof (tokens[3]);
+      msg (3, "found time limit '%.0f' in '%s'", tlim, errpath);
       if (found[TLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'time limit:' lines",
 	  errpath);
 	res = 0;
       } else {
-	double tlim = atof (tokens[3]);
 	found[TLIM] = 1;
-	msg (3, "found time limit '%.0f' in '%s'", tlim, errpath);
 	if (tlim <= 0) {
 	  msg (1,
 	    "error file '%s' with invalid time limit '%.0f'",
@@ -255,15 +255,15 @@ static int parserrfile (Entry * e, const char * errpath) {
 	       !strcmp (tokens[1], "real") &&
 	       !strcmp (tokens[2], "time") &&
 	       !strcmp (tokens[3], "limit:")) {
+      double rlim = atof (tokens[4]);
+      msg (3, "found real time limit '%.0f' in '%s'", rlim, errpath);
       if (found[RLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'real time limit:' lines",
 	  errpath);
 	res = 0;
       } else {
-	double rlim = atof (tokens[4]);
 	found[RLIM] = 1;
-	msg (3, "found real time limit '%.0f' in '%s'", rlim, errpath);
 	if (rlim <= 0) {
 	  msg (1,
 	    "error file '%s' with invalid real time limit '%.0f'",
@@ -282,15 +282,15 @@ static int parserrfile (Entry * e, const char * errpath) {
     } else if (ntokens > 3 &&
 	       !strcmp (tokens[1], "space") &&
 	       !strcmp (tokens[2], "limit:")) {
+      double slim = atof (tokens[3]);
+      msg (3, "found space limit '%.0f' in '%s'", slim, errpath);
       if (found[SLIM]) {
 	msg (1,
 	  "error file '%s' contains two 'space limit:' lines",
 	  errpath);
 	res = 0;
       } else {
-	double slim = atof (tokens[3]);
 	found[SLIM] = 1;
-	msg (3, "found space limit '%.0f' in '%s'", slim, errpath);
 	if (slim <= 0) {
 	  msg (1,
 	    "error file '%s' with invalid space limit '%.0f'",
@@ -331,7 +331,7 @@ static int parserrfile (Entry * e, const char * errpath) {
 	e->memout = 1;
 	res = 0;
       } else {
-	msg (3, "invalid status '%s' in '%s'", tokens[2], errpath);
+	msg (1, "invalid status line in '%s'", errpath);
 	found[STATUS] = 1;
 	e->unknown = 1;
 	res = 0;
@@ -356,8 +356,49 @@ static int parserrfile (Entry * e, const char * errpath) {
 	} else {
 	  msg (3, "found invalid '%d' result in '%s'", result, errpath);
 	  e->res = result;
-	  res = 0;
 	}
+      }
+    } else if (ntokens > 2 &&
+               !strcmp (tokens[1], "time:")) {
+      double time = atof (tokens[2]);
+      msg (3, "found time '%.2f' in '%s'", time, errpath);
+      if (found[TIME]) {
+	msg (1, "error file '%s' contains two 'time:' lines", errpath);
+	res = 0;
+      } else {
+	found[TIME] = 1;
+	if (time < 0) {
+	  msg (1, "invalid time '%.2f' in '%s'", time, errpath);
+	  res = 0;
+	} else e->time = time;
+      }
+    } else if (ntokens > 2 &&
+               !strcmp (tokens[1], "real:")) {
+      double real = atof (tokens[2]);
+      msg (3, "found real time '%.2f' in '%s'", real, errpath);
+      if (found[REAL]) {
+	msg (1, "error file '%s' contains two 'real:' lines", errpath);
+	res = 0;
+      } else {
+	found[REAL] = 1;
+	if (real < 0) {
+	  msg (1, "invalid real time '%.2f' in '%s'", real, errpath);
+	  res = 0;
+	} else e->real = real;
+      }
+    } else if (ntokens > 2 &&
+               !strcmp (tokens[1], "space:")) {
+      double space = atof (tokens[2]);
+      msg (3, "found space '%.1f' in '%s'", space, errpath);
+      if (found[REAL]) {
+	msg (1, "error file '%s' contains two 'space:' lines", errpath);
+	res = 0;
+      } else {
+	found[REAL] = 1;
+	if (space < 0) {
+	  msg (1, "invalid space '%.1f' in '%s'", space, errpath);
+	  res = 0;
+	} else e->space = space;
       }
     }
   }
@@ -369,7 +410,7 @@ static int parserrfile (Entry * e, const char * errpath) {
   FOUND (STATUS, "status:");
   FOUND (RESULT, "result:");
   FOUND (TIME,   "time:");
-  FOUND (WALL,   "real:");
+  FOUND (REAL,   "real:");
   FOUND (SPACE,  "space:");
   assert (checked == MAX);
   return res;
