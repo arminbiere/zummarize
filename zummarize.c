@@ -39,10 +39,10 @@ static int nzummaries, sizezummaries;
 static int loaded, written, updated;
 
 static char * token;
-static int ntoken, sizetoken;
+static int stoken, ntoken, sizetoken;
 static int lineno;
 
-static char ** tokens;
+static const char ** tokens;
 static int ntokens, sizetokens;
 
 static Symbol ** symtab;
@@ -135,13 +135,28 @@ static char * appendpath (const char * prefix, const char * name) {
   return res;
 }
 
+static void pushtoken (int ch) {
+  if (ntoken == sizetoken) {
+    int newsizetoken = sizetoken ? 2*sizetoken : 1;
+    char * oldtoken = token;
+    long delta;
+    token = realloc (token, newsizetoken);
+    if (!token) die ("out of memory reallocating token buffer");
+    sizetoken = newsizetoken;
+    if ((delta = token - oldtoken)) {
+      int i;
+      for (i = 0; i < ntokens; i++)
+	tokens[i] += i;
+    }
+  }
+  if (ntoken == INT_MAX) die ("token buffer overflow");
+  token[ntoken++] = ch;
+}
+
 static void pushtokens () {
-  char * res;
-  int i;
-  res = malloc (ntoken + 1);
-  if (!res) die ("out of memory copying token");
-  for (i = 0; i < ntoken; i++) res[i] = token[i];
-  res[i] = 0;
+  const char * res;
+  pushtoken (0);
+  res = token + stoken;
   if (sizetokens == ntokens) {
     int newsizetokens = sizetokens ? 2*sizetokens : 1;
     tokens = realloc (tokens, newsizetokens * sizeof *tokens);
@@ -150,38 +165,27 @@ static void pushtokens () {
   }
   if (ntokens == INT_MAX) die ("token stack overflow");
   tokens[ntokens++] = res;
-  ntoken = 0;
-}
-
-static void pushtoken (int ch) {
-  if (ntoken == sizetoken) {
-    int newsizetoken = sizetoken ? 2*sizetoken : 1;
-    token = realloc (token, newsizetoken);
-    if (!token) die ("out of memory reallocating token buffer");
-    sizetoken = newsizetoken;
-  }
-  if (ntoken == INT_MAX) die ("token buffer overflow");
-  token[ntoken++] = ch;
+  stoken = ntoken;
 }
 
 static int parseline (FILE * file, int maxtokens) {
   int i, newline = 0;
-  while (ntokens > 0) free (tokens[--ntokens]);
+  stoken = ntoken = ntokens = 0;
   ntoken = 0;
   for (;;) {
     int ch = getc (file);
     if (ch == EOF) break;
     if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
-      assert (ntokens < maxtokens || !ntoken);
-      if (ntoken) pushtokens ();
+      assert (ntokens < maxtokens || ntoken == stoken);
+      if (stoken < ntoken) pushtokens ();
       continue;
     }
     if (ntokens < maxtokens) pushtoken (ch);
-    else assert (!ntoken);
+    else assert (stoken == ntoken);
   }
-  assert (ntokens < maxtokens || !ntoken);
-  if (ntoken) pushtokens ();
+  assert (ntokens < maxtokens || stoken == ntoken);
+  if (stoken < ntoken) pushtokens ();
   if (verbose > 2)
     for (i = 0; i < ntokens; i++)
       msg (3, "token[%d,%d] %s", lineno, i, tokens[i]);
@@ -235,7 +239,7 @@ static unsigned hashstr (const char * name) {
   return res;
 }
 
-static void enlarge () {
+static void enlargesymtab () {
   unsigned newsizesymtab = sizesymtab ? 2*sizesymtab : 1;
   Symbol *s, *n, ** newsymtab;
   unsigned h, i;
@@ -263,7 +267,7 @@ static Entry * newentry (Zummary * z, const char * name) {
   if (!res) die ("out of memory allocating entry object");
   memset (res, 0, sizeof *res);
   res->zummary = z;
-  if (nsyms == sizesymtab) enlarge ();
+  if (nsyms == sizesymtab) enlargesymtab ();
   h = hashstr (name) & (sizesymtab - 1);
   searches++;
   for (p = symtab + h; (s = *p) && strcmp (s->name, name); p = &s->next)
@@ -905,7 +909,6 @@ static void reset () {
     free (z);
   }
   free (zummaries);
-  for (i = 0; i < ntokens; i++) free (tokens[i]);
   free (tokens);
   free (token);
   for (i = 0; i < nsyms; i++) {
