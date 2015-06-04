@@ -1,0 +1,5 @@
+This is a log file summary tool for logs generated with 'runlim'.
+
+./configure && make
+
+Copyright (C) 2015, Armin Biere, JKU Linz

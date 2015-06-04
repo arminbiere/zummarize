@@ -171,7 +171,6 @@ static void pushtokens () {
 static int parseline (FILE * file, int maxtokens) {
   int i, newline = 0;
   stoken = ntoken = ntokens = 0;
-  ntoken = 0;
   for (;;) {
     int ch = getc (file);
     if (ch == EOF) break;

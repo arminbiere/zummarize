@@ -1,0 +1,6 @@
+all: zummarize
+zummarize: zummarize.c makefile
+	@COMPILE@ -o $@ zummarize.c
+clean:
+	rm -f zummarize makefile
+.PHONY: all clean
