@@ -109,6 +109,7 @@ static Zummary * newzummary (const char * path) {
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
     zummaries = realloc (zummaries, newsize * sizeof *zummaries);
+    if (!zummaries) die ("out of memory reaallocating zummaries stack");
     sizezummaries = newsize;
   }
   zummaries[nzummaries++] = res;
