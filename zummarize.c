@@ -146,7 +146,7 @@ static void pushtoken (int ch) {
     if ((delta = token - oldtoken)) {
       int i;
       for (i = 0; i < ntokens; i++)
-	tokens[i] += i;
+	tokens[i] += delta;
     }
   }
   if (ntoken == INT_MAX) die ("token buffer overflow");
@@ -172,7 +172,7 @@ static int parseline (FILE * file, int maxtokens) {
   int i, newline = 0;
   stoken = ntoken = ntokens = 0;
   for (;;) {
-    int ch = getc (file);
+    int ch = getc_unlocked (file);
     if (ch == EOF) break;
     if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
@@ -550,6 +550,7 @@ static void parselogfile (Entry * e, const char * logpath) {
   file = fopen (logpath, "r");
   if (!file) die ("can not read log file '%s'", logpath);
   res = found = 0;
+#if 0
   while (parseline (file, 2)) {
     if (ntokens == 1) {
       if (!strcmp (tokens[0], "sat")) {
@@ -605,10 +606,138 @@ static void parselogfile (Entry * e, const char * logpath) {
       }
     }
   }
+#else
+  {
+    int ch;
+    const char * this = 0;
+START:
+    ch = getc_unlocked (file);
+    if (ch == EOF) goto DONE;
+    if (ch == '\n' || ch == '\r') goto START;
+    if (ch == '1') goto SEEN_1;
+    if (ch == '0') goto SEEN_0;
+    if (ch == 's') goto SEEN_S;
+WAIT:
+    ch = getc_unlocked (file);
+    if (ch == EOF) goto DONE;
+    if (ch == '\n') goto START;
+    goto WAIT;
+SEEN_0:
+    ch = getc_unlocked (file);
+    if (ch != '\n') goto WAIT;
+    this = "0";
+UNSAT:
+    assert (ch == '\n');
+    res = 20;
+RESULT:
+    msg (2, "found '%s' line in '%s'", this, logpath);
+    if (other)
+      die ("two results '%s' and '%s' in '%s'",
+           other, this, logpath);
+    other = this;
+    goto START;
+SEEN_1:
+    ch = getc_unlocked (file);
+    if (ch != '\n') goto WAIT;
+    this = "1";
+SAT:
+    assert (ch == '\n');
+    res = 10;
+    goto RESULT;
+SEEN_S:
+    assert (ch == 's');
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != ' ') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == 'S') goto SEEN_S_S;
+    if (ch == 'U') goto SEEN_S_U;
+    if (ch == '\n') goto START;
+    goto WAIT;
+SEEN_S_S:
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'A') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'T') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'I') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'S') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'F') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'I') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'A') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'B') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'L') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'E') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch != '\n') goto WAIT;
+    this = "s SATISFIABLE";
+    goto SAT;
+SEEN_S_U:
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'N') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'S') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'A') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'T') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'I') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'S') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'F') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'I') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'A') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'B') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'L') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch == '\n') goto START;
+    if (ch != 'E') goto WAIT;
+    ch = getc_unlocked (file);
+    if (ch != '\n') goto WAIT;
+    this = "s UNSATISFIABLE";
+    goto UNSAT;
+DONE:
+    ;
+  }
+#endif
   fclose (file);
   assert (found <= 1);
   assert (!e->res);
-  if (found) {
+  if (other) {
     assert (res == 10 || res == 20);
     e->res = res;
   } else {
@@ -866,16 +995,16 @@ static void printsummaries () {
   }
   sprintf (fmt, "%%%ds", len);
   printf (fmt, "");
-  printf (" %5s %5s %5s %5s %5s %3s %3s %3s %7s %7s %7s\n",
-    "count", "solve", "sat", "unsat", "fail", "to", "mo", "uo",
-    "time", "real", "space");
+  printf (" %5s %5s %5s %5s %5s %4s %4s %4s %7s %7s %7s\n",
+    "cnt", "sol", "sat", "uns", "fld", "tio", "meo", "unk",
+    "time", "real", "mem");
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
     int failed = z->timeout + z->memout + z->unknown;
     assert (solved + failed == z->count);
     printf (fmt, z->path);
-    printf (" %5d %5d %5d %5d %5d %3d %3d %3d %7.0f %7.0f %7.0f\n",
+    printf (" %5d %5d %5d %5d %5d %4d %4d %4d %7.0f %7.0f %7.0f\n",
       z->count,
       solved, z->sat, z->unsat,
       failed, z->timeout, z->memout, z->unknown,
