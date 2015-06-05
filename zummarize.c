@@ -921,7 +921,7 @@ static void updatezummary (Zummary * z) {
     else if (e->res == 20) z->unsat++;
     else if (e->timeout) assert (!e->res), e->res = 1, z->timeout++;
     else if (e->memout) assert (!e->res), e->res = 2, z->memout++;
-    else assert (e->unknown), assert (!e->res), e->res = 3, z->unknown++;
+    else assert (!e->res), e->res = 3, z->unknown++;
 
     if (e->res == 10 || e->res == 20) z->time += e->time, z->real += e->real;
     z->space += e->space;
