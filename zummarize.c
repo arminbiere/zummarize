@@ -677,6 +677,7 @@ START:
   if (ch == '1') goto SEEN_1;
   if (ch == '0') goto SEEN_0;
   if (ch == 's') goto SEEN_S;
+  if (ch == 'u') goto SEEN_U;
 WAIT:
   ch = nextch ();
   if (ch == EOF) goto DONE;
@@ -708,12 +709,40 @@ SEEN_S:
   assert (ch == 's');
   ch = nextch ();
   if (ch == '\n') goto START;
+  if (ch == 'a') goto SEEN_SA;
   if (ch != ' ') goto WAIT;
   ch = nextch ();
   if (ch == 'S') goto SEEN_S_S;
   if (ch == 'U') goto SEEN_S_U;
   if (ch == '\n') goto START;
   goto WAIT;
+SEEN_U:
+  assert (ch == 'u');
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'n') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 's') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'a') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 't') goto WAIT;
+  ch = nextch ();
+  if (ch != '\n') goto WAIT;
+  this = "unsat";
+  goto UNSAT;
+SEEN_SA:
+  assert (ch == 'a');
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 't') goto WAIT;
+  ch = nextch ();
+  if (ch != '\n') goto WAIT;
+  this = "sat";
+  goto SAT;
 SEEN_S_S:
   ch = nextch ();
   if (ch == '\n') goto START;
