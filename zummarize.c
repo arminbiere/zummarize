@@ -1099,9 +1099,10 @@ do { \
 static void printsummaries () {
   char fmt[100];
   int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max, i;
-  nam = cnt =  sat = uns = fld = max = 3;
+  cnt =  sat = uns = fld = max = 3;
   sol = tio = meo = unk = 2;
   tim = wll = mem = 4;
+  nam = 1;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     UPDATEIFLARGER (nam, strlen (z->path));
