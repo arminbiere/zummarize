@@ -1,14 +1,19 @@
 #!/bin/sh
-mmap=no
+mmap=yes
 getcunlocked=yes
 debug=no
 usage () {
 cat <<EOF
 usage: configure.sh [ <option> ... ]
+
+where <option> is one of the following:
+
 -h                  print this command line option summary
 -g                  include and compile with debugging support
+
 --mmap              enable memory mapped I/O
 --getc-unlocked     use 'getc_locked' instead of 'getc'
+
 --no-mmap           disable fast memory mapped I/O
 --no-getc-unlocked  use 'getc' instead of 'getc_unlocked'
 EOF
