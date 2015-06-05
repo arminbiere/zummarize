@@ -227,7 +227,66 @@ static void pushtoken (int ch) {
   token[ntoken++] = ch;
 }
 
-static void pushtokens () {
+static int pusherrtokens () {
+  const char * res;
+  int skip;
+  pushtoken (0);
+  res = token + stoken;
+  if (!ntokens &&
+      strcmp (res, "[run]")&&
+      strcmp (res, "[runlim]")) {
+    msg (3, "skipping line starting with '%s'", res);
+    skip = 1;
+  } else if (ntokens == 1 &&
+             !strcmp (res, "sample:")) {
+    msg (3, "skipping sample line");
+    skip = 1;
+  } else skip = 0;
+  if (skip) {
+    int ch;
+    while ((ch = nextch ()) != '\n')
+      if (ch == EOF) break;
+    if (ch == '\n') lineno++;
+    ntokens = ntoken = stoken = 0;
+    return 0;
+  }
+  if (sizetokens == ntokens) {
+    int newsizetokens = sizetokens ? 2*sizetokens : 1;
+    tokens = realloc (tokens, newsizetokens * sizeof *tokens);
+    if (!tokens) die ("out of memory reallocating token stack");
+    sizetokens = newsizetokens;
+  }
+  if (ntokens == INT_MAX) die ("token stack overflow");
+  tokens[ntokens++] = res;
+  stoken = ntoken;
+  return 1;
+}
+
+static int parserrline () {
+  int i, newline = 0, res = 1;
+  stoken = ntoken = ntokens = 0;
+  for (;;) {
+    int ch = nextch ();
+    if (ch == EOF) { res = 0; break; }
+    if (ch == '\n') { newline = 1; break; }
+    if (ch == ' ' || ch  == '\t' || ch == '\r') {
+      assert (ntokens < 5 || ntoken == stoken);
+      if (stoken < ntoken && !pusherrtokens ()) break;
+      continue;
+    }
+    if (ntokens < 5) pushtoken (ch);
+    else assert (stoken == ntoken);
+  }
+  assert (ntokens < 5 || stoken == ntoken);
+  if (stoken < ntoken) (void) pusherrtokens ();
+  if (verbose > 2)
+    for (i = 0; i < ntokens; i++)
+      msg (3, "token[%d,%d] %s", lineno, i, tokens[i]);
+  if (newline) lineno++;
+  return res;
+}
+
+static void pushzummarytokens () {
   const char * res;
   pushtoken (0);
   res = token + stoken;
@@ -242,7 +301,7 @@ static void pushtokens () {
   stoken = ntoken;
 }
 
-static int parseline (int maxtokens) {
+static int parsezummaryline () {
   int i, newline = 0;
   stoken = ntoken = ntokens = 0;
   for (;;) {
@@ -250,15 +309,12 @@ static int parseline (int maxtokens) {
     if (ch == EOF) break;
     if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
-      assert (ntokens < maxtokens || ntoken == stoken);
-      if (stoken < ntoken) pushtokens ();
+      if (stoken < ntoken) pushzummarytokens ();
       continue;
     }
-    if (ntokens < maxtokens) pushtoken (ch);
-    else assert (stoken == ntoken);
+    pushtoken (ch);
   }
-  assert (ntokens < maxtokens || stoken == ntoken);
-  if (stoken < ntoken) pushtokens ();
+  if (stoken < ntoken) pushzummarytokens ();
   if (verbose > 2)
     for (i = 0; i < ntokens; i++)
       msg (3, "token[%d,%d] %s", lineno, i, tokens[i]);
@@ -270,7 +326,7 @@ static int loadzummary (Zummary * z, const char * path) {
   msg (1, "trying to load zummary '%s'", path);
   open_input (path);
   lineno = 1;
-  while (parseline (INT_MAX))
+  while (parsezummaryline ())
     ;
   loaded++;
   return 0;
@@ -385,11 +441,9 @@ static int parserrfile (Entry * e, const char * errpath) {
   open_input (errpath);
   for (i = 0; i < MAX; i++) found[i] = 0;
   lineno = 1;
-  while (parseline (5)) {
+  while (parserrline ()) {
     if (!ntokens) continue;
-    if (strcmp (tokens[0], "[runlim]") &&
-        strcmp (tokens[0], "[run]"))
-      continue;
+    assert (!strcmp (tokens[0], "[run]") || !strcmp (tokens[0], "[runlim]"));
     if (ntokens > 3 &&
        !strcmp (tokens[1], "time") &&
        !strcmp (tokens[2], "limit:")) {
