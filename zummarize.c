@@ -921,7 +921,7 @@ static void updatezummary (Zummary * z) {
     else if (e->res == 20) z->unsat++;
     else if (e->timeout) assert (!e->res), e->res = 1, z->timeout++;
     else if (e->memout) assert (!e->res), e->res = 2, z->memout++;
-    else assert (!e->res), e->res = 3, z->unknown++;
+    else assert (!e->res), e->res = 3, e->unknown = 1, z->unknown++;
 
     if (e->res == 10 || e->res == 20) z->time += e->time, z->real += e->real;
     z->space += e->space;
@@ -1097,7 +1097,9 @@ do { \
 static void printsummaries () {
   char fmt[100];
   int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, i;
-  nam = cnt = sol = sat = uns = fld = tio = meo = unk = tim = wll = mem = 3;
+  nam = cnt =  sat = uns = fld = mem = 3;
+  sol = tio = meo = unk = 2;
+  tim = wll = 4;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     UPDATEIFLARGER (nam, strlen (z->path));
@@ -1116,7 +1118,7 @@ static void printsummaries () {
     "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
     nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
   printf (fmt,
-    "", "cnt", "sol", "sat", "uns", "fld", "tio", "meo", "unk", "tim", "wll", "mem");
+    "", "cnt", "ok", "sat", "uns", "fld", "to", "mo", "uk", "time", "real", "mem");
   sprintf (fmt,
     "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f\n",
     nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
