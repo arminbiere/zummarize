@@ -73,6 +73,109 @@ static void msg (int level, const char * fmt, ...) {
   fflush (stderr);
 }
 
+#ifndef NMMAP
+
+#if 0
+
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <assert.h>
+
+size_t getFilesize(const char* filename) {
+    struct stat st;
+    stat(filename, &st);
+    return st.st_size;   
+}
+
+int main(int argc, char** argv) {
+    size_t filesize = getFilesize(argv[1]);
+    //Open file
+    int fd = open(argv[1], O_RDONLY, 0);
+    assert(fd != -1);
+    //Execute mmap
+    void* mmappedData = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+    assert(mmappedData != NULL);
+    //Write the mmapped data to stdout (= FD #1)
+    write(1, mmappedData, filesize);
+    //Cleanup
+    int rc = munmap(mmappedData, filesize);
+    assert(rc == 0);
+    close(fd);
+}
+
+#endif
+
+#include <sys/mman.h>
+#include <fcntl.h>
+
+typedef struct Input { int fd; char * start, * top, * end; } Input;
+
+static size_t file_size (const char * path) {
+  struct stat buf;
+  if (stat (path, &buf)) die ("failed to determine size of '%s'", path);
+  return buf.st_size;
+}
+
+static Input * open_input (const char * path) {
+  size_t bytes = file_size (path);
+  char * start;
+  Input * res;
+  int fd = open (path, O_RDONLY);
+  if (fd == -1) die ("failed to open '%s'", path);
+  start = mmap (0, bytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+  if (!start) die ("failed to map '%s' to memory", path);
+  msg (2, "memory mapped '%s' of size %ld", path, (long) bytes);
+  res = malloc (sizeof *res);
+  if (!res) die ("out of memory allocating input object");
+  res->fd = fd;
+  res->top = res->start = start;
+  res->end = start + bytes;
+  return res;
+}
+
+static int nextch (Input * input) {
+  assert (input);
+  assert (input->top <= input->end);
+  if (input->top == input->end) return EOF;
+  return *input->top++;
+}
+
+static void close_input (Input * input) {
+  size_t bytes;
+  assert (input);
+  bytes = input->end - input->start;
+  if (munmap (input->start, bytes))
+    die ("failed to unmap file from memory");
+  if (close (input->fd))
+    die ("failed to close file");
+  free (input);
+}
+
+#else
+
+typedef FILE Input;
+
+static Input * open_input (const char * path) {
+  return fopen (path, "r");
+}
+
+static int nextch (Input * input) {
+#ifndef NGETCUNLOCKED
+  return getc_unlocked (input);
+#else
+  return getc (input);
+#endif
+}
+
+static void close_input (Input * input) {
+  fclose (input);
+}
+
+#endif
+
 static const char * USAGE =
 "usage: zummarize [-h|-v|-f|--no-write] [ <dir> ... ]\n"
 ;
@@ -168,11 +271,11 @@ static void pushtokens () {
   stoken = ntoken;
 }
 
-static int parseline (FILE * file, int maxtokens) {
+static int parseline (Input * file, int maxtokens) {
   int i, newline = 0;
   stoken = ntoken = ntokens = 0;
   for (;;) {
-    int ch = getc_unlocked (file);
+    int ch = nextch (file);
     if (ch == EOF) break;
     if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
@@ -193,7 +296,7 @@ static int parseline (FILE * file, int maxtokens) {
 }
 
 static int loadzummary (Zummary * z, const char * path) {
-  FILE * file = fopen (path, "r");
+  Input * file = open_input (path);
   msg (1, "trying to load zummary '%s'", path);
   if (!file) {
     msg (1, "could not open zummary '%s'", path);
@@ -310,10 +413,10 @@ do { \
 } while (0)
 
 static int parserrfile (Entry * e, const char * errpath) {
-  FILE * file;
+  Input * file;
   int found[MAX], i, checked, res = 1;
   msg (2, "parsing error file '%s'", errpath);
-  file = fopen (errpath, "r");
+  file = open_input (errpath);
   if (!file) die ("can not read '%s'", errpath);
   for (i = 0; i < MAX; i++) found[i] = 0;
   lineno = 1;
@@ -499,7 +602,7 @@ static int parserrfile (Entry * e, const char * errpath) {
       }
     }
   }
-  fclose (file);
+  close_input (file);
   checked = 0;
   FOUND (TLIM,   "time limit:");
   FOUND (RLIM,   "real time limit:");
@@ -541,200 +644,137 @@ static void sortzummary (Zummary * z) {
 }
 
 static void parselogfile (Entry * e, const char * logpath) {
-  const char * other = 0;
-  int found, res;
-  FILE * file;
+  const char * other = 0, * this = 0;
+  int found, res, ch;
+  Input * file;
   assert (!e->res);
   assert (!e->timeout), assert (!e->memout), assert (!e->unknown);
   msg (2, "parsing log file '%s'", logpath);
-  file = fopen (logpath, "r");
+  file = open_input (logpath);
   if (!file) die ("can not read log file '%s'", logpath);
   res = found = 0;
-#if 0
-  while (parseline (file, 2)) {
-    if (ntokens == 1) {
-      if (!strcmp (tokens[0], "sat")) {
-	msg (2, "found 'sat' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and 'sat' in '%s'",
-	       other, logpath);
-	other = "sat";
-	found = 1;
-	res = 10;
-      } else if (!strcmp (tokens[0], "unsat")) {
-	msg (2, "found 'unsat' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and 'unsat' in '%s'",
-	       other, logpath);
-	other = "unsat";
-	found = 1;
-	res = 20;
-      } else if (!strcmp (tokens[0], "1")) {
-	msg (2, "found '1' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and '1' in '%s'",
-	       other, logpath);
-	other = "1";
-	found = 1;
-	res = 10;
-      } else if (!strcmp (tokens[0], "0")) {
-	msg (2, "found '0' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and '0' in '%s'",
-	       other, logpath);
-	other = "0";
-	found = 1;
-	res = 10;
-      }
-    } else if (ntokens == 2 && !strcmp (tokens[0], "s")) {
-      if (!strcmp (tokens[1], "SATISFIABLE")) {
-	msg (2, "found 's SATISFIABLE' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and 's SATISFIABLE' in '%s'",
-	       other, logpath);
-	other = "s SATISFIABLE";
-	found = 1;
-	res = 10;
-      } else if (!strcmp (tokens[1], "UNSATISFIABLE")) {
-	msg (2, "found 's UNSATISFIABLE' line in '%s'", logpath);
-	if (found)
-	  die ("two results '%s' and 's UNSATISFIABLE' in '%s'",
-	       other, logpath);
-	other = "s UNSATISFIABLE";
-	found = 1;
-	res = 20;
-      }
-    }
-  }
-#else
-  {
-    int ch;
-    const char * this = 0;
 START:
-    ch = getc_unlocked (file);
-    if (ch == EOF) goto DONE;
-    if (ch == '\n' || ch == '\r') goto START;
-    if (ch == '1') goto SEEN_1;
-    if (ch == '0') goto SEEN_0;
-    if (ch == 's') goto SEEN_S;
+  ch = nextch (file);
+  if (ch == EOF) goto DONE;
+  if (ch == '\n' || ch == '\r') goto START;
+  if (ch == '1') goto SEEN_1;
+  if (ch == '0') goto SEEN_0;
+  if (ch == 's') goto SEEN_S;
 WAIT:
-    ch = getc_unlocked (file);
-    if (ch == EOF) goto DONE;
-    if (ch == '\n') goto START;
-    goto WAIT;
+  ch = nextch (file);
+  if (ch == EOF) goto DONE;
+  if (ch == '\n') goto START;
+  goto WAIT;
 SEEN_0:
-    ch = getc_unlocked (file);
-    if (ch != '\n') goto WAIT;
-    this = "0";
+  ch = nextch (file);
+  if (ch != '\n') goto WAIT;
+  this = "0";
 UNSAT:
-    assert (ch == '\n');
-    res = 20;
+  assert (ch == '\n');
+  res = 20;
 RESULT:
-    msg (2, "found '%s' line in '%s'", this, logpath);
-    if (other)
-      die ("two results '%s' and '%s' in '%s'",
-           other, this, logpath);
-    other = this;
-    goto START;
+  msg (2, "found '%s' line in '%s'", this, logpath);
+  if (other)
+    die ("two results '%s' and '%s' in '%s'",
+	 other, this, logpath);
+  other = this;
+  goto START;
 SEEN_1:
-    ch = getc_unlocked (file);
-    if (ch != '\n') goto WAIT;
-    this = "1";
+  ch = nextch (file);
+  if (ch != '\n') goto WAIT;
+  this = "1";
 SAT:
-    assert (ch == '\n');
-    res = 10;
-    goto RESULT;
+  assert (ch == '\n');
+  res = 10;
+  goto RESULT;
 SEEN_S:
-    assert (ch == 's');
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != ' ') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == 'S') goto SEEN_S_S;
-    if (ch == 'U') goto SEEN_S_U;
-    if (ch == '\n') goto START;
-    goto WAIT;
+  assert (ch == 's');
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != ' ') goto WAIT;
+  ch = nextch (file);
+  if (ch == 'S') goto SEEN_S_S;
+  if (ch == 'U') goto SEEN_S_U;
+  if (ch == '\n') goto START;
+  goto WAIT;
 SEEN_S_S:
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'A') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'T') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'I') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'S') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'F') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'I') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'A') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'B') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'L') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'E') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch != '\n') goto WAIT;
-    this = "s SATISFIABLE";
-    goto SAT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'A') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'T') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'I') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'S') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'F') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'I') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'A') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'B') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'L') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'E') goto WAIT;
+  ch = nextch (file);
+  if (ch != '\n') goto WAIT;
+  this = "s SATISFIABLE";
+  goto SAT;
 SEEN_S_U:
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'N') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'S') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'A') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'T') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'I') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'S') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'F') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'I') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'A') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'B') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'L') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch == '\n') goto START;
-    if (ch != 'E') goto WAIT;
-    ch = getc_unlocked (file);
-    if (ch != '\n') goto WAIT;
-    this = "s UNSATISFIABLE";
-    goto UNSAT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'N') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'S') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'A') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'T') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'I') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'S') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'F') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'I') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'A') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'B') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'L') goto WAIT;
+  ch = nextch (file);
+  if (ch == '\n') goto START;
+  if (ch != 'E') goto WAIT;
+  ch = nextch (file);
+  if (ch != '\n') goto WAIT;
+  this = "s UNSATISFIABLE";
+  goto UNSAT;
 DONE:
-    ;
-  }
-#endif
-  fclose (file);
+  close_input (file);
   assert (found <= 1);
   assert (!e->res);
   if (other) {

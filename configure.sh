@@ -1,19 +1,38 @@
 #!/bin/sh
+mmap=yes
+getcunlocked=yes
 debug=no
+usage () {
+cat <<EOF
+usage: configure.sh [<option...]
+-h                  print this command line option summary
+-g                  include and compile with debugging support
+--no-mmap           disable fast memory mapped I/O
+--no-getc-unlocked  use 'getc' instead of 'getc_unlocked'
+EOF
+}
 while [ $# -gt 0 ]
 do
   case $1 in
-    -h) echo "usage: configure.sh [-g]"; exit 0;;
+    -h)  usage; exit 0;;
     -g) debug=yes;;
-    *) echo "*** configure.sh: invalid option '$1' (try '-h')"; exit 1;;
+    --no-mmap) mmap=no;;
+    --no-getc-unlocked) getcunlocked=no;;
+    *)
+      echo "*** configure.sh: invalid option '$1' (try '-h')"
+      exit 1
+      ;;
   esac
   shift
 done
+COMPILE="gcc -Wall"
 if [ $debug = yes ]
 then
-  COMPILE="gcc -Wall -g"
+  COMPILE="$COMPILE -g"
 else
-  COMPILE="gcc -Wall -O3 -DNDEBUG"
+  COMPILE="$COMPILE -O3 -DNDEBUG"
 fi
+[ $mmap = no ] && COMPILE="$COMPILE -DNMMAP"
+[ $getcunlocked = no ] && COMPILE="$COMPILE -DNGETCUNLOCKED"
 echo "$COMPILE"
 sed -e "s,@COMPILE@,$COMPILE," makefile.in > makefile
