@@ -33,7 +33,7 @@ typedef struct Zummary {
   char * path;
   Entry * first, * last;
   int count, sat, unsat, memout, timeout, unknown;
-  double time, real, space, tlim, rlim, slim;
+  double time, real, space, max, tlim, rlim, slim;
 } Zummary;
 
 static int verbose, force, nowrite;
@@ -923,8 +923,10 @@ static void updatezummary (Zummary * z) {
     else if (e->memout) assert (!e->res), e->res = 2, z->memout++;
     else assert (!e->res), e->res = 3, e->unknown = 1, z->unknown++;
 
-    if (e->res == 10 || e->res == 20) z->time += e->time, z->real += e->real;
-    z->space += e->space;
+    if (e->res == 10 || e->res == 20) {
+      z->time += e->time, z->real += e->real, z->space += e->space;
+      if (e->space > z->max) z->max = e->space;
+    }
   }
   assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->unknown);
   sortzummary (z);
@@ -1096,10 +1098,10 @@ do { \
 
 static void printsummaries () {
   char fmt[100];
-  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, i;
-  nam = cnt =  sat = uns = fld = mem = 3;
+  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max, i;
+  nam = cnt =  sat = uns = fld = max = 3;
   sol = tio = meo = unk = 2;
-  tim = wll = 4;
+  tim = wll = mem = 4;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     UPDATEIFLARGER (nam, strlen (z->path));
@@ -1110,18 +1112,20 @@ static void printsummaries () {
     UPDATEIFLARGER (fld, ilen (z->timeout + z->memout + z->unknown));
     UPDATEIFLARGER (tio, ilen (z->timeout));
     UPDATEIFLARGER (meo, ilen (z->memout));
+    UPDATEIFLARGER (unk, ilen (z->unknown));
     UPDATEIFLARGER (tim, dlen (z->time));
     UPDATEIFLARGER (wll, dlen (z->real));
     UPDATEIFLARGER (mem, dlen (z->space));
+    UPDATEIFLARGER (max, dlen (z->max));
   }
   sprintf (fmt,
-    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
+    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max);
   printf (fmt,
-    "", "cnt", "ok", "sat", "uns", "fld", "to", "mo", "uk", "time", "real", "mem");
+    "", "cnt", "ok", "sat", "uns", "fld", "to", "mo", "uk", "time", "real", "space", "max");
   sprintf (fmt,
-    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
+    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
@@ -1130,7 +1134,7 @@ static void printsummaries () {
     printf (fmt,
       z->path,
       z->count, solved, z->sat, z->unsat, failed, z->timeout, z->memout, z->unknown,
-      z->time, z->real, z->space);
+      z->time, z->real, z->space, z->max);
   }
 }
 
