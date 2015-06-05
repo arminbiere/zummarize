@@ -985,29 +985,63 @@ static void sortzummaries () {
   msg (2, "sorted all zummaries");
 }
 
+static int ilen (int n) {
+  int res, tmp;
+  assert (n >= 0);
+  for (res = 1, tmp = 10; res < 10; res++, tmp *= 10)
+    if (n < tmp) return res;
+  return res;
+}
+
+static int dlen (double d) {
+  double tmp;
+  int res;
+  assert (d >= 0);
+  for (res = 1, tmp = 10; res < 20; res++, tmp *= 10)
+    if (d < tmp) return res;
+  return res;
+}
+
+#define UPDATEIFLARGER(OLDLEN,NEWLEN) \
+do { \
+  int TMP = (NEWLEN); \
+  if (TMP > OLDLEN) OLDLEN = TMP; \
+} while (0)
+
 static void printsummaries () {
-  char fmt[20];
-  int len = 0, i;
+  char fmt[100];
+  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, i;
+  nam = cnt = sol = sat = uns = fld = tio = meo = unk = tim = wll = mem = 3;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
-    int tmp = strlen (z->path);
-    if (tmp > len) len = tmp;
+    UPDATEIFLARGER (nam, strlen (z->path));
+    UPDATEIFLARGER (cnt, ilen (z->count));
+    UPDATEIFLARGER (sol, ilen (z->sat + z->unsat));
+    UPDATEIFLARGER (sat, ilen (z->sat));
+    UPDATEIFLARGER (uns, ilen (z->unsat));
+    UPDATEIFLARGER (fld, ilen (z->timeout + z->memout + z->unknown));
+    UPDATEIFLARGER (tio, ilen (z->timeout));
+    UPDATEIFLARGER (meo, ilen (z->memout));
+    UPDATEIFLARGER (tim, dlen (z->time));
+    UPDATEIFLARGER (wll, dlen (z->real));
+    UPDATEIFLARGER (mem, dlen (z->space));
   }
-  sprintf (fmt, "%%%ds", len);
-  printf (fmt, "");
-  printf (" %5s %5s %5s %5s %5s %4s %4s %4s %7s %7s %7s\n",
-    "cnt", "sol", "sat", "uns", "fld", "tio", "meo", "unk",
-    "time", "real", "mem");
+  sprintf (fmt,
+    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, tim, wll, mem);
+  printf (fmt,
+    "", "cnt", "sol", "sat", "uns", "fld", "tio", "meo", "unk", "tim", "wll", "mem");
+  sprintf (fmt,
+    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, tim, wll, mem);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
     int failed = z->timeout + z->memout + z->unknown;
     assert (solved + failed == z->count);
-    printf (fmt, z->path);
-    printf (" %5d %5d %5d %5d %5d %4d %4d %4d %7.0f %7.0f %7.0f\n",
-      z->count,
-      solved, z->sat, z->unsat,
-      failed, z->timeout, z->memout, z->unknown,
+    printf (fmt,
+      z->path,
+      z->count, solved, z->sat, z->unsat, failed, z->timeout, z->memout, z->unknown,
       z->time, z->real, z->space);
   }
 }
