@@ -4,7 +4,7 @@ getcunlocked=yes
 debug=no
 usage () {
 cat <<EOF
-usage: configure.sh [<option...]
+usage: configure.sh [ <option> ... ]
 -h                  print this command line option summary
 -g                  include and compile with debugging support
 --mmap              enable memory mapped I/O
