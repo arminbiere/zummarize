@@ -1113,13 +1113,13 @@ static void printsummaries () {
     UPDATEIFLARGER (mem, dlen (z->space));
   }
   sprintf (fmt,
-    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, tim, wll, mem);
+    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
   printf (fmt,
     "", "cnt", "sol", "sat", "uns", "fld", "tio", "meo", "unk", "tim", "wll", "mem");
   sprintf (fmt,
-    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, tim, wll, mem);
+    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f\n",
+    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
