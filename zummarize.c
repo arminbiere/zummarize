@@ -9,6 +9,10 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <limits.h>
+#ifndef NMMAP
+#include <sys/mman.h>
+#include <fcntl.h>
+#endif
 
 typedef struct Symbol {
   char * name;
@@ -75,43 +79,7 @@ static void msg (int level, const char * fmt, ...) {
 
 #ifndef NMMAP
 
-#if 0
-
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <assert.h>
-
-size_t getFilesize(const char* filename) {
-    struct stat st;
-    stat(filename, &st);
-    return st.st_size;   
-}
-
-int main(int argc, char** argv) {
-    size_t filesize = getFilesize(argv[1]);
-    //Open file
-    int fd = open(argv[1], O_RDONLY, 0);
-    assert(fd != -1);
-    //Execute mmap
-    void* mmappedData = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
-    assert(mmappedData != NULL);
-    //Write the mmapped data to stdout (= FD #1)
-    write(1, mmappedData, filesize);
-    //Cleanup
-    int rc = munmap(mmappedData, filesize);
-    assert(rc == 0);
-    close(fd);
-}
-
-#endif
-
-#include <sys/mman.h>
-#include <fcntl.h>
-
-typedef struct Input { int fd; char * start, * top, * end; } Input;
+static struct { int opened; int fd; char * start, * top, * end; } input;
 
 static size_t file_size (const char * path) {
   struct stat buf;
@@ -119,50 +87,51 @@ static size_t file_size (const char * path) {
   return buf.st_size;
 }
 
-static Input * open_input (const char * path) {
-  size_t bytes = file_size (path);
-  char * start;
-  Input * res;
-  int fd = open (path, O_RDONLY);
-  if (fd == -1) die ("failed to open '%s'", path);
-  start = mmap (0, bytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
-  if (!start) die ("failed to map '%s' to memory", path);
-  msg (2, "memory mapped '%s' of size %ld", path, (long) bytes);
-  res = malloc (sizeof *res);
-  if (!res) die ("out of memory allocating input object");
-  res->fd = fd;
-  res->top = res->start = start;
-  res->end = start + bytes;
-  return res;
-}
-
-static int nextch (Input * input) {
-  assert (input);
-  assert (input->top <= input->end);
-  if (input->top == input->end) return EOF;
-  return *input->top++;
-}
-
-static void close_input (Input * input) {
+static void open_input (const char * path) {
   size_t bytes;
-  assert (input);
-  bytes = input->end - input->start;
-  if (munmap (input->start, bytes))
+  assert (!input.opened);
+  bytes = file_size (path);
+  input.fd = open (path, O_RDONLY);
+  if (input.fd == -1) die ("failed to open '%s'", path);
+  input.start =
+    mmap (0, bytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, input.fd, 0);
+  if (!input.start) die ("failed to map '%s' to memory", path);
+  msg (2, "memory mapped '%s' of size %ld", path, (long) bytes);
+  input.top = input.start;
+  input.end = input.start + bytes;
+  input.opened = 1;
+}
+
+static int nextch () {
+  assert (input.opened);
+  assert (input.top <= input.end);
+  if (input.top == input.end) return EOF;
+  return *input.top++;
+}
+
+static void close_input () {
+  size_t bytes;
+  assert (input.opened);
+  bytes = input.end - input.start;
+  if (munmap (input.start, bytes))
     die ("failed to unmap file from memory");
-  if (close (input->fd))
+  if (close (input.fd))
     die ("failed to close file");
-  free (input);
+  input.opened = 0;
 }
 
 #else
 
-typedef FILE Input;
+static FILE * input;
 
-static Input * open_input (const char * path) {
-  return fopen (path, "r");
+static void open_input (const char * path) {
+  assert (!input);
+  if (!(input = fopen (path, "r")))
+    die ("failed to open '%s'", path);
 }
 
-static int nextch (Input * input) {
+static int nextch () {
+  assert (input);
 #ifndef NGETCUNLOCKED
   return getc_unlocked (input);
 #else
@@ -170,8 +139,10 @@ static int nextch (Input * input) {
 #endif
 }
 
-static void close_input (Input * input) {
+static void close_input () {
+  assert (input);
   fclose (input);
+  input = 0;
 }
 
 #endif
@@ -271,11 +242,11 @@ static void pushtokens () {
   stoken = ntoken;
 }
 
-static int parseline (Input * file, int maxtokens) {
+static int parseline (int maxtokens) {
   int i, newline = 0;
   stoken = ntoken = ntokens = 0;
   for (;;) {
-    int ch = nextch (file);
+    int ch = nextch ();
     if (ch == EOF) break;
     if (ch == '\n') { newline = 1; break; }
     if (ch == ' ' || ch  == '\t' || ch == '\r') {
@@ -296,14 +267,10 @@ static int parseline (Input * file, int maxtokens) {
 }
 
 static int loadzummary (Zummary * z, const char * path) {
-  Input * file = open_input (path);
   msg (1, "trying to load zummary '%s'", path);
-  if (!file) {
-    msg (1, "could not open zummary '%s'", path);
-    return 0;
-  }
+  open_input (path);
   lineno = 1;
-  while (parseline (file, INT_MAX))
+  while (parseline (INT_MAX))
     ;
   loaded++;
   return 0;
@@ -413,14 +380,12 @@ do { \
 } while (0)
 
 static int parserrfile (Entry * e, const char * errpath) {
-  Input * file;
   int found[MAX], i, checked, res = 1;
   msg (2, "parsing error file '%s'", errpath);
-  file = open_input (errpath);
-  if (!file) die ("can not read '%s'", errpath);
+  open_input (errpath);
   for (i = 0; i < MAX; i++) found[i] = 0;
   lineno = 1;
-  while (parseline (file, 5)) {
+  while (parseline (5)) {
     if (!ntokens) continue;
     if (strcmp (tokens[0], "[runlim]") &&
         strcmp (tokens[0], "[run]"))
@@ -602,7 +567,7 @@ static int parserrfile (Entry * e, const char * errpath) {
       }
     }
   }
-  close_input (file);
+  close_input ();
   checked = 0;
   FOUND (TLIM,   "time limit:");
   FOUND (RLIM,   "real time limit:");
@@ -646,27 +611,25 @@ static void sortzummary (Zummary * z) {
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
   int found, res, ch;
-  Input * file;
   assert (!e->res);
   assert (!e->timeout), assert (!e->memout), assert (!e->unknown);
   msg (2, "parsing log file '%s'", logpath);
-  file = open_input (logpath);
-  if (!file) die ("can not read log file '%s'", logpath);
+  open_input (logpath);
   res = found = 0;
 START:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == EOF) goto DONE;
   if (ch == '\n' || ch == '\r') goto START;
   if (ch == '1') goto SEEN_1;
   if (ch == '0') goto SEEN_0;
   if (ch == 's') goto SEEN_S;
 WAIT:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == EOF) goto DONE;
   if (ch == '\n') goto START;
   goto WAIT;
 SEEN_0:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "0";
 UNSAT:
@@ -680,7 +643,7 @@ RESULT:
   other = this;
   goto START;
 SEEN_1:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "1";
 SAT:
@@ -689,92 +652,92 @@ SAT:
   goto RESULT;
 SEEN_S:
   assert (ch == 's');
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != ' ') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == 'S') goto SEEN_S_S;
   if (ch == 'U') goto SEEN_S_U;
   if (ch == '\n') goto START;
   goto WAIT;
 SEEN_S_S:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'A') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'T') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'I') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'S') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'F') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'I') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'A') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'B') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'L') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'E') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "s SATISFIABLE";
   goto SAT;
 SEEN_S_U:
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'N') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'S') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'A') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'T') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'I') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'S') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'F') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'I') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'A') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'B') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'L') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch == '\n') goto START;
   if (ch != 'E') goto WAIT;
-  ch = nextch (file);
+  ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "s UNSATISFIABLE";
   goto UNSAT;
 DONE:
-  close_input (file);
+  close_input ();
   assert (found <= 1);
   assert (!e->res);
   if (other) {
