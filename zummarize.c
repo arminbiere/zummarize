@@ -1101,7 +1101,8 @@ static void printsummaries () {
   int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max, i;
   cnt =  sat = uns = fld = max = 3;
   sol = tio = meo = unk = 2;
-  tim = wll = mem = 4;
+  tim = wll = 4;
+  mem = 5;
   nam = 1;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
