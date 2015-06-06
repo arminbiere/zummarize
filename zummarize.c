@@ -332,7 +332,13 @@ static int loadzummary (Zummary * z, const char * path) {
   return 0;
 }
 
-static int zummaryneedsupdate (Zummary * z, const char * path) {
+static int getmtime (const char * path, double * timeptr) {
+  struct stat buf;
+  if (stat (path, &buf)) {
+    msg (1, "can not get modification time of '%s'", path);
+    return 0;
+  }
+  *timeptr = buf.st_mtime;
   return 1;
 }
 
@@ -346,6 +352,47 @@ static char * stripsuffix (const char * str, const char * suffix) {
   if (!res) die ("out of memory stripping suffix");
   res[k] = 0;
   while (k-- > 0) res[k] = str[k];
+  return res;
+}
+
+static int zummaryneedsupdate (Zummary * z, const char * path) {
+  double ztime, etime, ltime, res = 0;
+  struct dirent * dirent;
+  DIR * dir;
+  if (!getmtime (path, &ztime)) return 1;
+  if (!(dir = opendir (z->path)))
+    die ("can not open directory '%s' for checking times", z->path);
+  while (!res && !(dirent = readdir (dir))) {
+    char * base, * logname, * logpath;
+    const char * errname = dirent->d_name;
+    msg (2, "checking '%s'", errname);
+    if (!(base = stripsuffix (errname, ".err"))) {
+      msg (2, "skipping '%s'", errname);
+      continue;
+    }
+    logname = appendstr (base, ".log");
+    logpath = appendpath (z->path, logname);
+    if (isfile (logpath)) {
+      char * errpath = appendpath (z->path, errname);
+      if (getmtime (errpath, &etime)) {
+	if (etime <= ztime) {
+	  if (getmtime (logpath, &ltime)) {
+	    if (ltime > ztime) {
+	      msg (1, "log file '%s' more recently modified", logpath);
+	      res = 1;
+	    }
+	  } else res = 1;
+	} else {
+	  msg (1, "error file '%s' more recently modified", errpath);
+	  res = 1;
+	}
+      } else res = 1;
+    } else msg (1, "missing '%s'", logpath);
+    free (logpath);
+    free (logname);
+    free (base);
+  }
+  (void) closedir (dir);
   return res;
 }
 
@@ -838,7 +885,7 @@ static void updatezummary (Zummary * z) {
   Entry * e;
   msg (1, "updating zummary for directory '%s'", z->path);
   if (!(dir = opendir (z->path)))
-    die ("can not open directory '%s'", z->path);
+    die ("can not open directory '%s' for updating", z->path);
   z->count = 0;
   while ((dirent = readdir (dir))) {
     char * base, * logname, * logpath;
@@ -961,10 +1008,10 @@ static void zummarizeone (const char * path) {
     msg (1, "zummary file '%s' not found", pathtozummary);
   else if (force)
     msg (1, "forcing update of '%s' (through '-f' option)", pathtozummary);
-  else if (!loadzummary (z, pathtozummary))
-    msg (1, "failed to load zummary '%s'", pathtozummary);
   else if (zummaryneedsupdate (z, pathtozummary))
     msg (1, "zummary '%s' needs update", pathtozummary);
+  else if (!loadzummary (z, pathtozummary))
+    msg (1, "failed to load zummary '%s'", pathtozummary);
   else update = 0;
   if (update) {
     updatezummary (z);
