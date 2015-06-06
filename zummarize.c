@@ -322,16 +322,6 @@ static int parsezummaryline () {
   return ntokens;
 }
 
-static int loadzummary (Zummary * z, const char * path) {
-  msg (1, "trying to load zummary '%s'", path);
-  open_input (path);
-  lineno = 1;
-  while (parsezummaryline ())
-    ;
-  loaded++;
-  return 0;
-}
-
 static int getmtime (const char * path, double * timeptr) {
   struct stat buf;
   if (stat (path, &buf)) {
@@ -356,8 +346,9 @@ static char * stripsuffix (const char * str, const char * suffix) {
 }
 
 static int zummaryneedsupdate (Zummary * z, const char * path) {
-  double ztime, etime, ltime, res = 0;
+  double ztime;
   struct dirent * dirent;
+  int res = 0;
   DIR * dir;
   if (!getmtime (path, &ztime)) return 1;
   if (!(dir = opendir (z->path)))
@@ -374,8 +365,10 @@ static int zummaryneedsupdate (Zummary * z, const char * path) {
     logpath = appendpath (z->path, logname);
     if (isfile (logpath)) {
       char * errpath = appendpath (z->path, errname);
+      double etime;
       if (getmtime (errpath, &etime)) {
 	if (etime <= ztime) {
+	  double ltime;
 	  if (getmtime (logpath, &ltime)) {
 	    if (ltime > ztime) {
 	      msg (1, "log file '%s' more recently modified", logpath);
@@ -457,6 +450,10 @@ static Entry * newentry (Zummary * z, const char * name) {
   if (s->last) s->last->chain = res;
   else s->first = res;
   s->last = res;
+  z->count++;
+  if (z->last) z->last->next = res;
+  else z->first = res;
+  z->last = res;
   return res;
 }
 
@@ -879,58 +876,8 @@ DONE:
   }
 }
 
-static void updatezummary (Zummary * z) {
-  struct dirent * dirent;
-  DIR * dir;
+static void fixzummary (Zummary * z) {
   Entry * e;
-  msg (1, "updating zummary for directory '%s'", z->path);
-  if (!(dir = opendir (z->path)))
-    die ("can not open directory '%s' for updating", z->path);
-  z->count = 0;
-  while ((dirent = readdir (dir))) {
-    char * base, * logname, * logpath;
-    const char * errname = dirent->d_name;
-    msg (2, "checking '%s'", errname);
-    if (!(base = stripsuffix (errname, ".err"))) {
-      msg (2, "skipping '%s'", errname);
-      continue;
-    }
-    logname = appendstr (base, ".log");
-    logpath = appendpath (z->path, logname);
-    if (isfile (logpath)) {
-      char * errpath = appendpath (z->path, errname);
-      e = newentry (z, base);
-      assert (isfile (errpath));
-      z->count++;
-      if (z->last) z->last->next = e;
-      else z->first = e;
-      z->last = e;
-      if (!parserrfile (e, errpath)) assert (!e->res);
-      else if (!e->res) parselogfile (e, logpath);
-      else assert (e->res == 10 || e->res == 20);
-      free (errpath);
-      assert (!e->res || e->res == 10 || e->res == 20);
-      assert (!e->timeout || !e->res);
-      assert (!e->memout || !e->res);
-      assert (!e->unknown || !e->res);
-    } else msg (1, "missing '%s'", logpath);
-    free (logpath);
-    free (logname);
-    free (base);
-  }
-  (void) closedir (dir);
-  msg (1, "found %d entries in '%s'", z->count, z->path);
-  if (z->tlim < 0) die ("no time limit in '%s'", z->path);
-  if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
-  if (z->slim < 0) die ("no space limit in '%s'", z->path);
-  if (nzummaries > 1) {
-    if (z->tlim != zummaries[0]->tlim)
-      die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
-    if (z->rlim != zummaries[0]->rlim)
-      die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
-    if (z->slim != zummaries[0]->slim)
-      die ("different space limit '%.0f' in '%s'", z->slim, z->path);
-  }
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -976,6 +923,124 @@ static void updatezummary (Zummary * z) {
     }
   }
   assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->unknown);
+}
+
+static int mystrcmp (const char * a, const char * b) {
+  return strcmp (a, b);
+}
+
+static void loadzummary (Zummary * z, const char * path) {
+  int first = 1;
+  assert (!z->count);
+  msg (1, "trying to load zummary '%s'", path);
+  open_input (path);
+  lineno = 1;
+  while (parsezummaryline ()) {
+    if (!first) {
+      double tlim, rlim, slim;
+      Entry * e;
+      if (ntokens != 8)
+	die ("invalid line in '%s'", path);
+      e = newentry (z, tokens[0]);
+      e->res = atoi (tokens[1]);
+      if (e->res != 10 && e->res != 20) {
+	if (e->res == 1) e->timeout = 1;
+	else if (e->res == 2) e->memout = 1;
+	else e->unknown = 1;
+	e->res = 0;
+      }
+      e->time = atof (tokens[2]);
+      e->real = atof (tokens[3]);
+      e->space = atof (tokens[4]);
+      tlim = atof (tokens[5]);
+      if (tlim <= 0)
+	die ("invalid time limit %.0f in '%s'", tlim, path);
+      if (z->tlim < 0) {
+	msg (1, "setting time limit of '%s' to %.0f", z->path, tlim);
+	z->tlim = tlim;
+      } else if (z->tlim != tlim)
+        die ("different time limit %.0f in '%s'", tlim, path);
+      rlim = atof (tokens[6]);
+      if (rlim <= 0)
+	die ("invalid real time limit %.0f in '%s'", rlim, path);
+      if (z->rlim < 0) {
+	msg (1, "setting real time limit of '%s' to %.0f", z->path, rlim);
+	z->rlim = rlim;
+      } else if (z->rlim != rlim)
+        die ("different space limit %.0f in '%s'", rlim, path);
+      slim = atof (tokens[7]);
+      if (slim <= 0)
+	die ("invalid space limit %.0f in '%s'", slim, path);
+      if (z->slim < 0) {
+	msg (1, "setting space limit of '%s' to %.0f", z->path, slim);
+	z->slim = slim;
+      } else if (z->slim != slim)
+        die ("different space limit %.0f in '%s'", slim, path);
+    } else if (ntokens != 7 ||
+               mystrcmp (tokens[0], "result") ||
+               mystrcmp (tokens[1], "time") ||
+               mystrcmp (tokens[2], "real") ||
+               mystrcmp (tokens[3], "space") ||
+               mystrcmp (tokens[4], "tlim") ||
+               mystrcmp (tokens[5], "rlim") ||
+               mystrcmp (tokens[6], "slim"))
+      die ("invalid header in '%s'", path);
+    else first = 0;
+  } msg (1, "loaded %d entries from '%s'", z->count, path);
+  fixzummary (z);
+  sortzummary (z);
+  loaded++;
+}
+
+static void updatezummary (Zummary * z) {
+  struct dirent * dirent;
+  DIR * dir;
+  Entry * e;
+  msg (1, "updating zummary for directory '%s'", z->path);
+  if (!(dir = opendir (z->path)))
+    die ("can not open directory '%s' for updating", z->path);
+  z->count = 0;
+  while ((dirent = readdir (dir))) {
+    char * base, * logname, * logpath;
+    const char * errname = dirent->d_name;
+    msg (2, "checking '%s'", errname);
+    if (!(base = stripsuffix (errname, ".err"))) {
+      msg (2, "skipping '%s'", errname);
+      continue;
+    }
+    logname = appendstr (base, ".log");
+    logpath = appendpath (z->path, logname);
+    if (isfile (logpath)) {
+      char * errpath = appendpath (z->path, errname);
+      e = newentry (z, base);
+      assert (isfile (errpath));
+      if (!parserrfile (e, errpath)) assert (!e->res);
+      else if (!e->res) parselogfile (e, logpath);
+      else assert (e->res == 10 || e->res == 20);
+      free (errpath);
+      assert (!e->res || e->res == 10 || e->res == 20);
+      assert (!e->timeout || !e->res);
+      assert (!e->memout || !e->res);
+      assert (!e->unknown || !e->res);
+    } else msg (1, "missing '%s'", logpath);
+    free (logpath);
+    free (logname);
+    free (base);
+  }
+  (void) closedir (dir);
+  msg (1, "found %d entries in '%s'", z->count, z->path);
+  if (z->tlim < 0) die ("no time limit in '%s'", z->path);
+  if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
+  if (z->slim < 0) die ("no space limit in '%s'", z->path);
+  if (nzummaries > 1) {
+    if (z->tlim != zummaries[0]->tlim)
+      die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
+    if (z->rlim != zummaries[0]->rlim)
+      die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
+    if (z->slim != zummaries[0]->slim)
+      die ("different space limit '%.0f' in '%s'", z->slim, z->path);
+  }
+  fixzummary (z);
   sortzummary (z);
   updated++;
 }
@@ -983,13 +1048,13 @@ static void updatezummary (Zummary * z) {
 static void writezummary (Zummary * z, const char * path) {
   FILE * file;
   Entry * e;
-  file = fopen ("/tmp/zummary", "w");		// TODO set this to path
+  file = fopen (path, "w");		// TODO set this to path
   if (!file) die ("can not write '%s'", path);
-  fputs (" result time real space\n", file);
+  fputs (" result time real space tlim rlim slim\n", file);
   for (e = z->first; e; e = e->next)
     fprintf (file,
-      "%s %d %.2f %.2f %.1f\n",
-      e->name, e->res, e->time, e->real, e->space);
+      "%s %d %.2f %.2f %.1f %.0f %.0f %.0f\n",
+      e->name, e->res, e->time, e->real, e->space, z->tlim, z->rlim, z->slim);
   fclose (file);
   msg (1, "written %d entries to zummary '%s'", z->count, path);
   written++;
@@ -1010,9 +1075,10 @@ static void zummarizeone (const char * path) {
     msg (1, "forcing update of '%s' (through '-f' option)", pathtozummary);
   else if (zummaryneedsupdate (z, pathtozummary))
     msg (1, "zummary '%s' needs update", pathtozummary);
-  else if (!loadzummary (z, pathtozummary))
-    msg (1, "failed to load zummary '%s'", pathtozummary);
-  else update = 0;
+  else {
+    loadzummary (z, pathtozummary);
+    update = 0;
+  }
   if (update) {
     updatezummary (z);
     if (!nowrite) writezummary (z, pathtozummary);
