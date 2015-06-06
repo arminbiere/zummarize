@@ -328,6 +328,7 @@ static int getmtime (const char * path, double * timeptr) {
     msg (1, "can not get modification time of '%s'", path);
     return 0;
   }
+  msg (2, "modification time %.0f of '%s'", (double) buf.st_mtime, path);
   *timeptr = buf.st_mtime;
   return 1;
 }
@@ -346,14 +347,14 @@ static char * stripsuffix (const char * str, const char * suffix) {
 }
 
 static int zummaryneedsupdate (Zummary * z, const char * path) {
-  double ztime;
   struct dirent * dirent;
+  double ztime;
   int res = 0;
   DIR * dir;
   if (!getmtime (path, &ztime)) return 1;
   if (!(dir = opendir (z->path)))
     die ("can not open directory '%s' for checking times", z->path);
-  while (!res && !(dirent = readdir (dir))) {
+  while (!res && (dirent = readdir (dir))) {
     char * base, * logname, * logpath;
     const char * errname = dirent->d_name;
     msg (2, "checking '%s'", errname);
@@ -943,12 +944,6 @@ static void loadzummary (Zummary * z, const char * path) {
 	die ("invalid line in '%s'", path);
       e = newentry (z, tokens[0]);
       e->res = atoi (tokens[1]);
-      if (e->res != 10 && e->res != 20) {
-	if (e->res == 1) e->timeout = 1;
-	else if (e->res == 2) e->memout = 1;
-	else e->unknown = 1;
-	e->res = 0;
-      }
       e->time = atof (tokens[2]);
       e->real = atof (tokens[3]);
       e->space = atof (tokens[4]);
@@ -976,6 +971,15 @@ static void loadzummary (Zummary * z, const char * path) {
 	z->slim = slim;
       } else if (z->slim != slim)
         die ("different space limit %.0f in '%s'", slim, path);
+      msg (2,
+        "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f",
+	e->name, e->res, e->time, e->real, e->space, tlim, rlim, slim);
+      if (e->res != 10 && e->res != 20) {
+	if (e->res == 1) e->timeout = 1;
+	else if (e->res == 2) e->memout = 1;
+	else e->unknown = 1;
+	e->res = 0;
+      }
     } else if (ntokens != 7 ||
                mystrcmp (tokens[0], "result") ||
                mystrcmp (tokens[1], "time") ||
@@ -987,6 +991,7 @@ static void loadzummary (Zummary * z, const char * path) {
       die ("invalid header in '%s'", path);
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->count, path);
+  close_input ();
   fixzummary (z);
   sortzummary (z);
   loaded++;
