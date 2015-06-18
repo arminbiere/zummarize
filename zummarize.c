@@ -57,12 +57,23 @@ static int usereal;
 
 static void die (const char * fmt, ...) {
   va_list ap;
-  fputs ("*** zummarize: ", stderr);
+  fflush (stdout);
+  fputs ("*** zummarize error: ", stderr);
   va_start (ap, fmt);
   vfprintf (stderr, fmt, ap);
   va_end (ap);
   fputc ('\n', stderr);
   exit (1);
+}
+
+static void wrn (const char * fmt, ...) {
+  va_list ap;
+  fflush (stdout);
+  fputs ("*** zummarize warning: ", stderr);
+  va_start (ap, fmt);
+  vfprintf (stderr, fmt, ap);
+  va_end (ap);
+  fputc ('\n', stderr);
 }
 
 static void msg (int level, const char * fmt, ...) {
@@ -114,9 +125,9 @@ static void close_input () {
   assert (input.opened);
   bytes = input.end - input.start;
   if (munmap (input.start, bytes))
-    die ("failed to unmap file from memory");
+    wrn ("failed to unmap file from memory");
   if (close (input.fd))
-    die ("failed to close file");
+    wrn ("failed to close file");
   input.opened = 0;
 }
 
