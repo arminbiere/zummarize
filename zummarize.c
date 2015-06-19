@@ -1049,7 +1049,7 @@ static void updatezummary (Zummary * z) {
     if (z->tlim < 0) die ("no time limit in '%s'", z->path);
     if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
     if (z->slim < 0) die ("no space limit in '%s'", z->path);
-    if (nzummaries > 1) {
+    if (nzummaries > 1 && z->count) {
       if (z->tlim != zummaries[0]->tlim)
 	die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
       if (z->rlim != zummaries[0]->rlim)
@@ -1099,7 +1099,7 @@ static void zummarizeone (const char * path) {
   }
   if (update) {
     updatezummary (z);
-    if (!nowrite) writezummary (z, pathtozummary);
+    if (!nowrite && z->count) writezummary (z, pathtozummary);
   }
   free (pathtozummary);
 }
