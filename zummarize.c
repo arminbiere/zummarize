@@ -1154,12 +1154,15 @@ static void discrepancies () {
 }
 
 static void checklimits () {
-  Zummary * y, * z;
+  Zummary * x, * y, * z;
   int i;
-  if (nzummaries <= 1) return;
-  y = zummaries[0];
-  for (i = 1; i < nzummaries; i++) {
-    z = zummaries[i];
+  y = 0;
+  for (i = 0; !y && i < nzummaries; i++)
+    if ((x = zummaries[i])->count) y = x;
+  if (!y) return;
+  while (i < nzummaries) {
+    z = zummaries[i++];
+    if (!z->count) continue;
     if (y->tlim != z->tlim)
       die ("different time limit in '%s' and '%s'", y->path, z->path);
     if (y->rlim != z->rlim)
