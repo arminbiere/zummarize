@@ -1045,16 +1045,18 @@ static void updatezummary (Zummary * z) {
   }
   (void) closedir (dir);
   msg (1, "found %d entries in '%s'", z->count, z->path);
-  if (z->tlim < 0) die ("no time limit in '%s'", z->path);
-  if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
-  if (z->slim < 0) die ("no space limit in '%s'", z->path);
-  if (nzummaries > 1) {
-    if (z->tlim != zummaries[0]->tlim)
-      die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
-    if (z->rlim != zummaries[0]->rlim)
-      die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
-    if (z->slim != zummaries[0]->slim)
-      die ("different space limit '%.0f' in '%s'", z->slim, z->path);
+  if (z->count) {
+    if (z->tlim < 0) die ("no time limit in '%s'", z->path);
+    if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
+    if (z->slim < 0) die ("no space limit in '%s'", z->path);
+    if (nzummaries > 1) {
+      if (z->tlim != zummaries[0]->tlim)
+	die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
+      if (z->rlim != zummaries[0]->rlim)
+	die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
+      if (z->slim != zummaries[0]->slim)
+	die ("different space limit '%.0f' in '%s'", z->slim, z->path);
+    }
   }
   fixzummary (z);
   sortzummary (z);
