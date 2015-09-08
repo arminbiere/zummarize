@@ -748,9 +748,14 @@ UNSAT:
   res = 20;
 RESULT:
   msg (2, "found '%s' line in '%s'", this, logpath);
-  if (other)
-    die ("two results '%s' and '%s' in '%s'",
-	 other, this, logpath);
+  if (other) {
+    if (strcmp (other, this))
+      die ("two different results '%s' and '%s' in '%s'",
+        other, this, logpath);
+    else
+      wrn ("two (identical) results '%s' and '%s' in '%s'",
+        other, this, logpath);
+  }
   other = this;
   goto START;
 SEEN_1:
