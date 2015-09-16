@@ -25,7 +25,7 @@ typedef struct Entry {
   struct Zummary * zummary;
   struct Entry * next, * chain;
   double time, real, space;
-  char timeout, memout, unknown, discrepancy;
+  char timeout, memout, unknown, discrepancy, sig11, sig6;
   int res, bound, maxubound, minsbound;
 } Entry;
 
@@ -33,6 +33,7 @@ typedef struct Zummary {
   char * path, dirty;
   Entry * first, * last;
   int count, sat, unsat, memout, timeout, unknown, discrepancy, bound;
+  int sig11, sig6;
   double time, real, space, max, tlim, rlim, slim;
 } Zummary;
 
@@ -928,6 +929,7 @@ static void fixzummary (Zummary * z) {
   Entry * e;
   z->sat = z->unsat = z->timeout = z->memout = z->unknown = z->discrepancy = 0;
   z->time = z->real = z->space = z->max = 0;
+  z->sig11 = z->sig6 = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -961,6 +963,8 @@ static void fixzummary (Zummary * z) {
     assert (!e->timeout + !e->memout + !e->unknown >= 2);
 #endif
          if (e->discrepancy) e->res = 4, z->discrepancy++;
+    else if (e->sig11) z->sig11++;
+    else if (e->sig6) z->sig6++;
     else if (e->res == 10) z->sat++;
     else if (e->res == 20) z->unsat++;
     else if (e->timeout) assert (!e->res), e->res = 1, z->timeout++;
@@ -1296,9 +1300,9 @@ do { \
 
 static void printzummaries () {
   char fmt[100];
-  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, dis, tim, wll, mem, max, i;
-  cnt =  sat = uns = fld = max = 3;
-  sol = tio = meo = 2;
+  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6, unk, dis, tim, wll, mem, max, i;
+  cnt =  sat = uns = fld = max = s11 = 3;
+  sol = tio = meo = s6 = 2;
   nam = dis = unk = 1;
   tim = wll = 4;
   mem = 5;
@@ -1313,6 +1317,8 @@ static void printzummaries () {
     UPDATEIFLARGER (fld, ilen (z->timeout + z->memout + z->unknown));
     UPDATEIFLARGER (tio, ilen (z->timeout));
     UPDATEIFLARGER (meo, ilen (z->memout));
+    UPDATEIFLARGER (s11, ilen (z->sig11));
+    UPDATEIFLARGER (s6,  ilen (z->sig6));
     UPDATEIFLARGER (unk, ilen (z->unknown));
     UPDATEIFLARGER (tim, dlen (z->time));
     UPDATEIFLARGER (wll, dlen (z->real));
@@ -1320,22 +1326,22 @@ static void printzummaries () {
     UPDATEIFLARGER (max, dlen (z->max));
   }
   sprintf (fmt,
-    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
-    nam, cnt, sol, sat, uns, dis, fld, tio, meo, unk, tim, wll, mem, max);
+    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, s6, unk, tim, wll, mem, max);
   printf (fmt,
-    "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "x", "time", "real", "space", "max");
+    "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "s11", "s6", "x", "time", "real", "space", "max");
   sprintf (fmt,
-    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, dis, fld, tio, meo, unk, tim, wll, mem, max);
+    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, s6, unk, tim, wll, mem, max);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
-    int failed = z->timeout + z->memout + z->unknown;
+    int failed = z->timeout + z->memout + z->sig11 + z->sig6 + z->unknown;
     assert (solved + failed + z->discrepancy == z->count);
     printf (fmt,
       z->path,
       z->count, solved, z->sat, z->unsat, z->discrepancy,
-      failed, z->timeout, z->memout, z->unknown,
+      failed, z->timeout, z->memout, z->sig11, z->sig6, z->unknown,
       z->time, z->real, z->space, z->max);
   }
 }
