@@ -25,14 +25,14 @@ typedef struct Entry {
   struct Zummary * zummary;
   struct Entry * next, * chain;
   double time, real, space;
-  char timeout, memout, unknown;
-  int res;
+  char timeout, memout, unknown, discrepancy;
+  int res, bound, maxubound, minsbound;
 } Entry;
 
 typedef struct Zummary {
-  char * path;
+  char * path, dirty;
   Entry * first, * last;
-  int count, sat, unsat, memout, timeout, unknown;
+  int count, sat, unsat, memout, timeout, unknown, discrepancy, bound;
   double time, real, space, max, tlim, rlim, slim;
 } Zummary;
 
@@ -57,35 +57,32 @@ static int usereal;
 
 static void die (const char * fmt, ...) {
   va_list ap;
-  fflush (stdout);
-  fputs ("*** zummarize error: ", stderr);
+  fputs ("*** zummarize error: ", stdout);
   va_start (ap, fmt);
-  vfprintf (stderr, fmt, ap);
+  vfprintf (stdout, fmt, ap);
   va_end (ap);
-  fputc ('\n', stderr);
+  fputc ('\n', stdout);
   exit (1);
 }
 
 static void wrn (const char * fmt, ...) {
   va_list ap;
-  fflush (stdout);
-  fputs ("*** zummarize warning: ", stderr);
+  fputs ("*** zummarize warning: ", stdout);
   va_start (ap, fmt);
-  vfprintf (stderr, fmt, ap);
+  vfprintf (stdout, fmt, ap);
   va_end (ap);
-  fputc ('\n', stderr);
+  fputc ('\n', stdout);
 }
 
 static void msg (int level, const char * fmt, ...) {
   va_list ap;
   if (verbose < level) return;
-  fflush (stderr);
-  fputs ("[zummarize] ", stderr);
+  fputs ("[zummarize] ", stdout);
   va_start (ap, fmt);
-  vfprintf (stderr, fmt, ap);
+  vfprintf (stdout, fmt, ap);
   va_end (ap);
-  fputc ('\n', stderr);
-  fflush (stderr);
+  fputc ('\n', stdout);
+  fflush (stdout);
 }
 
 #ifndef NMMAP
@@ -189,7 +186,7 @@ static Zummary * newzummary (const char * path) {
   memset (res, 0, sizeof *res);
   res->path = strdup (path);
   if (!res->path) die ("out of memory copy zummary path");
-  res->tlim = res->rlim = res->slim = -1;
+  res->tlim = res->rlim = res->slim = res->bound = -1;
   striptrailingslash (res->path);
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
@@ -444,6 +441,7 @@ static Entry * newentry (Zummary * z, const char * name) {
   if (!res) die ("out of memory allocating entry object");
   memset (res, 0, sizeof *res);
   res->zummary = z;
+  res->bound = res->maxubound = res->minsbound = -1;
   if (nsyms == sizesymtab) enlargesymtab ();
   h = hashstr (name) & (sizesymtab - 1);
   searches++;
@@ -718,9 +716,24 @@ static void sortzummary (Zummary * z) {
   free (entries);
 }
 
+static int getposnum (int ch) {
+  int res, digit;
+  assert (isdigit (ch));
+  res = ch - '0';
+  while (isdigit (ch = nextch ())) {
+    if (INT_MAX/10 < res) return -1;
+    res *= 10;
+    digit = (ch - '0');
+    if (INT_MAX - digit > res) return -1;
+    res += digit;
+  }
+  if (ch != '\n') return -1;
+  return res;
+}
+
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
-  int found, res, ch;
+  int found, res, ch, bound;
   assert (!e->res);
   assert (!e->timeout), assert (!e->memout), assert (!e->unknown);
   msg (2, "parsing log file '%s'", logpath);
@@ -769,6 +782,13 @@ SAT:
 SEEN_S:
   assert (ch == 's');
   ch = nextch ();
+  if (isdigit (ch)) {
+    bound = getposnum (ch);
+    if (bound < 0) goto WAIT;
+    if (e->minsbound < 0 || e->minsbound > bound)
+      e->minsbound = bound;
+    goto START;
+  }
   if (ch == '\n') goto START;
   if (ch == 'a') goto SEEN_SA;
   if (ch != ' ') goto WAIT;
@@ -780,6 +800,13 @@ SEEN_S:
 SEEN_U:
   assert (ch == 'u');
   ch = nextch ();
+  if (isdigit (ch)) {
+    bound = getposnum (ch);
+    if (bound < 0) goto WAIT;
+    if (e->maxubound < 0 || e->maxubound > bound)
+      e->maxubound = bound;
+    goto START;
+  }
   if (ch == '\n') goto START;
   if (ch != 'n') goto WAIT;
   ch = nextch ();
@@ -891,10 +918,16 @@ DONE:
     msg (2, "no proper sat/unsat line found in '%s'", logpath);
     assert (!res);
   }
+  if (e->minsbound >= 0)
+    msg (2, "found minimum 's...' line 's%d'", e->minsbound);
+  if (e->maxubound >= 0)
+    msg (2, "found maximum 'u...' line 'u%d'", e->maxubound);
 }
 
 static void fixzummary (Zummary * z) {
   Entry * e;
+  z->sat = z->unsat = z->timeout = z->memout = z->unknown = z->discrepancy = 0;
+  z->time = z->real = z->space = z->max = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -923,12 +956,11 @@ static void fixzummary (Zummary * z) {
 #ifndef NDEBUG
     if (e->res)
       assert (e->res == 10 || e->res == 20),
-      assert (!e->memout), assert (!e->unknown), assert (!e->unknown);
-    assert (!e->timeout || !e->memout);
-    assert (!e->timeout || !e->unknown);
-    assert (!e->memout || !e->unknown);
+      assert (!e->memout), assert (!e->timeout), assert (!e->unknown);
+    assert (!e->timeout + !e->memout + !e->unknown >= 2);
 #endif
-         if (e->res == 10) z->sat++;
+         if (e->discrepancy) e->res = 4, z->discrepancy++;
+    else if (e->res == 10) z->sat++;
     else if (e->res == 20) z->unsat++;
     else if (e->timeout) assert (!e->res), e->res = 1, z->timeout++;
     else if (e->memout) assert (!e->res), e->res = 2, z->memout++;
@@ -939,7 +971,7 @@ static void fixzummary (Zummary * z) {
       if (e->space > z->max) z->max = e->space;
     }
   }
-  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->unknown);
+  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->unknown + z->discrepancy);
 }
 
 static int mystrcmp (const char * a, const char * b) {
@@ -956,7 +988,7 @@ static void loadzummary (Zummary * z, const char * path) {
     if (!first) {
       double tlim, rlim, slim;
       Entry * e;
-      if (ntokens != 8)
+      if (ntokens < 8 || ntokens > 9)
 	die ("invalid line in '%s'", path);
       e = newentry (z, tokens[0]);
       e->res = atoi (tokens[1]);
@@ -987,23 +1019,28 @@ static void loadzummary (Zummary * z, const char * path) {
 	z->slim = slim;
       } else if (z->slim != slim)
         die ("different space limit %.0f in '%s'", slim, path);
+      if (ntokens < 9 || (e->bound = atof (tokens[8])) < 0)
+	e->bound = -1;
       msg (2,
-        "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f",
-	e->name, e->res, e->time, e->real, e->space, tlim, rlim, slim);
+        "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d",
+	e->name, e->res, e->time, e->real, e->space, tlim, rlim, slim, e->bound);
       if (e->res != 10 && e->res != 20) {
 	if (e->res == 1) e->timeout = 1;
 	else if (e->res == 2) e->memout = 1;
 	else e->unknown = 1;
 	e->res = 0;
       }
-    } else if (ntokens != 7 ||
+    } else if (ntokens < 7 ||
+               ntokens > 8 ||
                mystrcmp (tokens[0], "result") ||
                mystrcmp (tokens[1], "time") ||
                mystrcmp (tokens[2], "real") ||
                mystrcmp (tokens[3], "space") ||
                mystrcmp (tokens[4], "tlim") ||
                mystrcmp (tokens[5], "rlim") ||
-               mystrcmp (tokens[6], "slim"))
+               mystrcmp (tokens[6], "slim") ||
+	       (ntokens == 8 &&
+                mystrcmp (tokens[6], "bound")))
       die ("invalid header in '%s'", path);
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->count, path);
@@ -1128,10 +1165,11 @@ static void sortsymbols () {
 }
 
 static void discrepancies () {
-  int i;
+  int i, count = 0;;
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
-    int sat = 0, unsat = 0;
+    int sat = 0, unsat = 0, expected;
+    char cmp;
     Entry * e;
     for (e = s->first; e; e = e->chain) {
       assert (e->name == s->name);
@@ -1140,22 +1178,41 @@ static void discrepancies () {
     }
     if (!sat) continue;
     if (!unsat) continue;
-    fflush (stdout);
-    fprintf (stderr,
-      "*** zummarize: discrepancy on '%s' with %d SAT and %d UNSAT\n",
-      s->name, sat, unsat);
+    if (sat > unsat) expected = 10, cmp = '>';
+    else if (sat < unsat) expected = 20, cmp = '<';
+    else expected = 0, cmp = '=';
+    fprintf (stdout,
+      "*** zummarize: discrepancy on '%s' with %d SAT %c %d UNSAT\n",
+      s->name, sat, unsat, cmp);
     for (e = s->first; e; e = e->chain) {
       if (e->res < 10) continue;
       assert (e->res == 10 || e->res == 20);
-      fprintf (stderr,
-        "*** zummarize: '%s/%s' %s\n",
+      fprintf (stdout,
+        "*** zummarize: '%s/%s' %s",
 	e->zummary->path, s->name, 
 	(e->res == 10 ? "SAT" : "UNSAT"));
+      if (!expected)
+	fprintf (stdout, " (unclear so assumed wrong)");
+      if (expected && e->res != expected)
+	fprintf (stdout, " (probably wrong)");
+      if (e->res != expected)
+	e->discrepancy = 1, e->zummary->dirty = 1;
+      fputc ('\n', stdout);
     }
-    fflush (stderr);
-    exit (1);
+    fflush (stdout);
+    count++;
   }
-  msg (1, "no discrepancies found");
+  if (count) {
+    msg (1, "found %d discrepancies", count);
+    count = 0;
+    for (i = 0; i < nzummaries; i++) {
+      Zummary * z = zummaries[i];
+      if (!z->dirty) continue;
+      fixzummary (z);
+      count++;
+    }
+    msg (1, "fixed %d zummaries", count);
+  } else msg (1, "no discrepancies found");
 }
 
 static void checklimits () {
@@ -1235,14 +1292,14 @@ do { \
   if (TMP > OLDLEN) OLDLEN = TMP; \
 } while (0)
 
-static void printsummaries () {
+static void printzummaries () {
   char fmt[100];
-  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max, i;
+  int nam, cnt, sol, sat, uns, fld, tio, meo, unk, dis, tim, wll, mem, max, i;
   cnt =  sat = uns = fld = max = 3;
-  sol = tio = meo = unk = 2;
+  sol = tio = meo = 2;
+  nam = dis = unk = 1;
   tim = wll = 4;
   mem = 5;
-  nam = 1;
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     UPDATEIFLARGER (nam, strlen (z->path));
@@ -1250,6 +1307,7 @@ static void printsummaries () {
     UPDATEIFLARGER (sol, ilen (z->sat + z->unsat));
     UPDATEIFLARGER (sat, ilen (z->sat));
     UPDATEIFLARGER (uns, ilen (z->unsat));
+    UPDATEIFLARGER (dis, ilen (z->discrepancy));
     UPDATEIFLARGER (fld, ilen (z->timeout + z->memout + z->unknown));
     UPDATEIFLARGER (tio, ilen (z->timeout));
     UPDATEIFLARGER (meo, ilen (z->memout));
@@ -1260,13 +1318,13 @@ static void printsummaries () {
     UPDATEIFLARGER (max, dlen (z->max));
   }
   sprintf (fmt,
-    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max);
+    "%%%ds %%%ds %%%ds %%%ds %%%d s%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, unk, tim, wll, mem, max);
   printf (fmt,
-    "", "cnt", "ok", "sat", "uns", "fld", "to", "mo", "uk", "time", "real", "space", "max");
+    "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "x", "time", "real", "space", "max");
   sprintf (fmt,
-    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, fld, tio, meo, unk, tim, wll, mem, max);
+    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, unk, tim, wll, mem, max);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
@@ -1274,7 +1332,8 @@ static void printsummaries () {
     assert (solved + failed == z->count);
     printf (fmt,
       z->path,
-      z->count, solved, z->sat, z->unsat, failed, z->timeout, z->memout, z->unknown,
+      z->count, solved, z->sat, z->unsat, z->discrepancy,
+      failed, z->timeout, z->memout, z->unknown,
       z->time, z->real, z->space, z->max);
   }
 }
@@ -1288,7 +1347,7 @@ static void zummarizeall () {
   discrepancies ();
   checklimits ();
   sortzummaries ();
-  printsummaries ();
+  printzummaries ();
 }
 
 static void reset () {
