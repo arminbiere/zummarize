@@ -953,6 +953,7 @@ static void fixzummary (Zummary * z) {
     }
   }
   for (e = z->first; e; e = e->next) {
+    if (e->res < 10) e->res = 0;
 #ifndef NDEBUG
     if (e->res)
       assert (e->res == 10 || e->res == 20),
@@ -1182,17 +1183,18 @@ static void discrepancies () {
     else if (sat < unsat) expected = 20, cmp = '<';
     else expected = 0, cmp = '=';
     fprintf (stdout,
-      "*** zummarize: discrepancy on '%s' with %d SAT %c %d UNSAT\n",
-      s->name, sat, unsat, cmp);
+      "*** zummarize: DISCREPANCY on '%s' with %d SAT %c %d UNSAT\n",
+      s->name, sat, cmp, unsat);
     for (e = s->first; e; e = e->chain) {
       if (e->res < 10) continue;
       assert (e->res == 10 || e->res == 20);
       fprintf (stdout,
-        "*** zummarize: '%s/%s' %s",
+        "*** zummarize: %s '%s/%s' %s",
+        (e->res == expected) ? " " : "!",
 	e->zummary->path, s->name, 
 	(e->res == 10 ? "SAT" : "UNSAT"));
       if (!expected)
-	fprintf (stdout, " (unclear so assumed wrong)");
+	fprintf (stdout, " (unclear status so assumed wrong)");
       if (expected && e->res != expected)
 	fprintf (stdout, " (probably wrong)");
       if (e->res != expected)
@@ -1318,7 +1320,7 @@ static void printzummaries () {
     UPDATEIFLARGER (max, dlen (z->max));
   }
   sprintf (fmt,
-    "%%%ds %%%ds %%%ds %%%ds %%%d s%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
+    "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
     nam, cnt, sol, sat, uns, dis, fld, tio, meo, unk, tim, wll, mem, max);
   printf (fmt,
     "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "x", "time", "real", "space", "max");
@@ -1329,7 +1331,7 @@ static void printzummaries () {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
     int failed = z->timeout + z->memout + z->unknown;
-    assert (solved + failed == z->count);
+    assert (solved + failed + z->discrepancy == z->count);
     printf (fmt,
       z->path,
       z->count, solved, z->sat, z->unsat, z->discrepancy,
