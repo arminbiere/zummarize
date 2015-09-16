@@ -812,7 +812,7 @@ SEEN_U:
   if (isdigit (ch)) {
     bound = getposnum (ch);
     if (bound < 0) goto WAIT;
-    if (e->maxubound < 0 || e->maxubound > bound)
+    if (e->maxubound < 0 || e->maxubound < bound)
       e->maxubound = bound;
     goto START;
   }
@@ -928,9 +928,9 @@ DONE:
     assert (!res);
   }
   if (e->minsbound >= 0)
-    msg (2, "found minimum 's...' line 's%d'", e->minsbound);
+    msg (2, "found minimum sat-bound 's%d' in '%s'", e->minsbound, logpath);
   if (e->maxubound >= 0)
-    msg (2, "found maximum 'u...' line 'u%d'", e->maxubound);
+    msg (2, "found maximum unsat-bound 'u%d'", e->maxubound, logpath);
 }
 
 static void fixzummary (Zummary * z) {
