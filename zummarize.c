@@ -589,6 +589,14 @@ static int parserrfile (Entry * e, const char * errpath) {
       } else if (!strcmp (tokens[2], "ok")) {
 	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
+      } else if (!strcmp (tokens[2], "signal(11)")) {
+	msg (2, "found 'ok' status in '%s'", errpath);
+	found[STATUS] = 1;
+	e->sig11 = 1;
+      } else if (!strcmp (tokens[2], "signal(6)")) {
+	msg (2, "found 'ok' status in '%s'", errpath);
+	found[STATUS] = 1;
+	e->sig6 = 1;
       } else if (ntokens > 4 &&
 		 !strcmp (tokens[2], "out") &&
 		 !strcmp (tokens[3], "of") &&
@@ -955,28 +963,33 @@ static void fixzummary (Zummary * z) {
     }
   }
   for (e = z->first; e; e = e->next) {
-    if (e->res < 10) e->res = 0;
-#ifndef NDEBUG
-    if (e->res)
+    if (e->res < 10) {
+           if (e->res == 1) e->timeout = 1;
+      else if (e->res == 2) e->memout = 1;
+      else if (e->res == 3) e->unknown = 1;
+      else if (e->res == 4) e->discrepancy = 1;
+      else if (e->res == 5) e->sig11 = 1;
+      else if (e->res == 6) e->sig6 = 1;
+      e->res = 0;
+    } else
       assert (e->res == 10 || e->res == 20),
       assert (!e->memout), assert (!e->timeout), assert (!e->unknown);
     assert (!e->timeout + !e->memout + !e->unknown >= 2);
-#endif
          if (e->discrepancy) e->res = 4, z->discrepancy++;
-    else if (e->sig11) z->sig11++;
-    else if (e->sig6) z->sig6++;
+    else if (e->sig11) e->res = 5, z->sig11++;
+    else if (e->sig6) e->res = 6, z->sig6++;
     else if (e->res == 10) z->sat++;
     else if (e->res == 20) z->unsat++;
-    else if (e->timeout) assert (!e->res), e->res = 1, z->timeout++;
-    else if (e->memout) assert (!e->res), e->res = 2, z->memout++;
-    else assert (!e->res), e->res = 3, e->unknown = 1, z->unknown++;
-
+    else if (e->timeout) e->res = 1, z->timeout++;
+    else if (e->memout) e->res = 2, z->memout++;
+    else e->res = 3, e->unknown = 1, z->unknown++;
+    assert (e->res);
     if (e->res == 10 || e->res == 20) {
       z->time += e->time, z->real += e->real, z->space += e->space;
       if (e->space > z->max) z->max = e->space;
     }
   }
-  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->unknown + z->discrepancy);
+  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->sig11 + z->sig6 + z->unknown + z->discrepancy);
 }
 
 static int mystrcmp (const char * a, const char * b) {
@@ -1030,9 +1043,12 @@ static void loadzummary (Zummary * z, const char * path) {
         "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d",
 	e->name, e->res, e->time, e->real, e->space, tlim, rlim, slim, e->bound);
       if (e->res != 10 && e->res != 20) {
-	if (e->res == 1) e->timeout = 1;
-	else if (e->res == 2) e->memout = 1;
-	else e->unknown = 1;
+	     if (e->res == 1) e->timeout = 1;
+	     if (e->res == 2) e->memout = 1;
+	else if (e->res == 3) e->unknown = 1;
+	else if (e->res == 4) e->discrepancy = 1;
+	else if (e->res == 5) e->sig11 = 1;
+	else if (e->res == 6) e->sig6 = 1;
 	e->res = 0;
       }
     } else if (ntokens < 7 ||
