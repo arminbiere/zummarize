@@ -733,7 +733,7 @@ static int getposnum (int ch) {
     if (INT_MAX/10 < res) return -1;
     res *= 10;
     digit = (ch - '0');
-    if (INT_MAX - digit > res) return -1;
+    if (INT_MAX - digit < res) return -1;
     res += digit;
   }
   if (ch != '\n') return -1;
