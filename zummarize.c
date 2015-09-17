@@ -25,7 +25,7 @@ typedef struct Entry {
   struct Zummary * zummary;
   struct Entry * next, * chain;
   double time, real, space;
-  char timeout, memout, unknown, discrepancy, sig11, sig6;
+  char timeout, memout, unknown, discrepancy, s11, si6;
   int res, bound, maxubound, minsbound;
 } Entry;
 
@@ -33,7 +33,7 @@ typedef struct Zummary {
   char * path, dirty;
   Entry * first, * last;
   int count, sat, unsat, memout, timeout, unknown, discrepancy, bound;
-  int sig11, sig6;
+  int s11, si6;
   double time, real, space, max, tlim, rlim, slim;
 } Zummary;
 
@@ -592,11 +592,11 @@ static int parserrfile (Entry * e, const char * errpath) {
       } else if (!strcmp (tokens[2], "signal(11)")) {
 	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
-	e->sig11 = 1;
+	e->s11 = 1;
       } else if (!strcmp (tokens[2], "signal(6)")) {
 	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
-	e->sig6 = 1;
+	e->si6 = 1;
       } else if (ntokens > 4 &&
 		 !strcmp (tokens[2], "out") &&
 		 !strcmp (tokens[3], "of") &&
@@ -937,7 +937,7 @@ static void fixzummary (Zummary * z) {
   Entry * e;
   z->sat = z->unsat = z->timeout = z->memout = z->unknown = z->discrepancy = 0;
   z->time = z->real = z->space = z->max = 0;
-  z->sig11 = z->sig6 = 0;
+  z->s11 = z->si6 = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -968,16 +968,16 @@ static void fixzummary (Zummary * z) {
       else if (e->res == 2) e->memout = 1;
       else if (e->res == 3) e->unknown = 1;
       else if (e->res == 4) e->discrepancy = 1;
-      else if (e->res == 5) e->sig11 = 1;
-      else if (e->res == 6) e->sig6 = 1;
+      else if (e->res == 5) e->s11 = 1;
+      else if (e->res == 6) e->si6 = 1;
       e->res = 0;
     } else
       assert (e->res == 10 || e->res == 20),
       assert (!e->memout), assert (!e->timeout), assert (!e->unknown);
     assert (!e->timeout + !e->memout + !e->unknown >= 2);
          if (e->discrepancy) e->res = 4, z->discrepancy++;
-    else if (e->sig11) e->res = 5, z->sig11++;
-    else if (e->sig6) e->res = 6, z->sig6++;
+    else if (e->s11) e->res = 5, z->s11++;
+    else if (e->si6) e->res = 6, z->si6++;
     else if (e->res == 10) z->sat++;
     else if (e->res == 20) z->unsat++;
     else if (e->timeout) e->res = 1, z->timeout++;
@@ -989,7 +989,7 @@ static void fixzummary (Zummary * z) {
       if (e->space > z->max) z->max = e->space;
     }
   }
-  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->sig11 + z->sig6 + z->unknown + z->discrepancy);
+  assert (z->count == z->sat + z->unsat + z->timeout + z->memout + z->s11 + z->si6 + z->unknown + z->discrepancy);
 }
 
 static int mystrcmp (const char * a, const char * b) {
@@ -1047,8 +1047,8 @@ static void loadzummary (Zummary * z, const char * path) {
 	     if (e->res == 2) e->memout = 1;
 	else if (e->res == 3) e->unknown = 1;
 	else if (e->res == 4) e->discrepancy = 1;
-	else if (e->res == 5) e->sig11 = 1;
-	else if (e->res == 6) e->sig6 = 1;
+	else if (e->res == 5) e->s11 = 1;
+	else if (e->res == 6) e->si6 = 1;
 	e->res = 0;
       }
     } else if (ntokens < 7 ||
@@ -1308,19 +1308,13 @@ static int dlen (double d) {
   return res;
 }
 
-#define UPDATEIFLARGER(OLDLEN,NEWLEN) \
-do { \
-  int TMP = (NEWLEN); \
-  if (TMP > OLDLEN) OLDLEN = TMP; \
-} while (0)
-
 static void printzummaries () {
-  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6;
+  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, si6;
   int unk, dis, tim, wll, mem, max;
   int i, j, skip;
-  char fmt[100];
+  char fmt[1000];
 
-  nam = cnt = sol = sat = uns = fld = tio = meo = s11 = s6 = unk = 0;
+  nam = cnt = sol = sat = uns = fld = tio = meo = s11 = si6 = unk = 0;
   dis = tim = wll = mem = max = 0;
 
   skip = nzummaries ? strlen (zummaries[0]->path) : 0;
@@ -1334,6 +1328,12 @@ static void printzummaries () {
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
 
+#define UPDATEIFLARGER(OLDLEN,NEWLEN) \
+  do { \
+    int TMP = (NEWLEN); \
+    if (TMP > OLDLEN) OLDLEN = TMP; \
+  } while (0)
+
     UPDATEIFLARGER (nam, strlen (z->path + skip));
     UPDATEIFLARGER (cnt, ilen (z->count));
     UPDATEIFLARGER (sol, ilen (z->sat + z->unsat));
@@ -1343,54 +1343,85 @@ static void printzummaries () {
     UPDATEIFLARGER (fld, ilen (z->timeout + z->memout + z->unknown));
     UPDATEIFLARGER (tio, ilen (z->timeout));
     UPDATEIFLARGER (meo, ilen (z->memout));
-    UPDATEIFLARGER (s11, ilen (z->sig11));
-    UPDATEIFLARGER (s6,  ilen (z->sig6));
+    UPDATEIFLARGER (s11, ilen (z->s11));
+    UPDATEIFLARGER (si6,  ilen (z->si6));
     UPDATEIFLARGER (unk, ilen (z->unknown));
     UPDATEIFLARGER (tim, dlen (z->time));
     UPDATEIFLARGER (wll, dlen (z->real));
     UPDATEIFLARGER (mem, dlen (z->space));
     UPDATEIFLARGER (max, dlen (z->max));
-
   }
 
-  if (cnt && cnt < 3) cnt = 3;
-  if (sat && sat < 3) sat = 3;
-  if (uns && uns < 3) uns = 3;
-  if (fld && fld < 3) fld = 3;
-  if (max && max < 3) max = 3;
-  if (s11 && s11 < 3) s11 = 3;
+#define RESTRICTO(NAME,NUM) \
+  do { if (NAME && NAME < NUM) NAME = NUM; } while (0)
 
-  if (sol && sol < 2) sol = 2;
-  if (tio && tio < 2) tio = 2;
-  if (meo && meo < 2) meo = 2;
-  if (s6  && s6  < 2) s6  = 2;
+  RESTRICTO (nam, 1);
+  RESTRICTO (cnt, 3);
+  RESTRICTO (sol, 2);
+  RESTRICTO (sat, 3);
+  RESTRICTO (uns, 3);
+  RESTRICTO (dis, 1);
+  RESTRICTO (fld, 3);
+  RESTRICTO (tio, 2);
+  RESTRICTO (meo, 2);
+  RESTRICTO (s11, 3);
+  RESTRICTO (si6, 3);
+  RESTRICTO (unk, 1);
+  RESTRICTO (tim, 4);
+  RESTRICTO (wll, 4);
+  RESTRICTO (mem, 3);
+  RESTRICTO (max, 3);
 
-  if (nam && nam < 1) nam = 1;
-  if (dis && dis < 1) dis = 1;
-  if (meo && meo < 1) meo = 1;
+#define HEADERFMT(NAME,OOPS) \
+  do { \
+    int LEN; \
+    if (!NAME) break; \
+    LEN = strlen (fmt); \
+    if (LEN) fmt[LEN++] = ' '; \
+    sprintf (fmt + LEN, "%%%ds", NAME); \
+  } while (0)
 
-  if (tim && tim < 4) tim = 4;
-  if (wll && wll < 4) wll = 4;
+  fmt[0] = 0;
+  HEADERFMT (nam, "");
+  HEADERFMT (cnt, "cnt");
+  HEADERFMT (sol, "ok");
+  HEADERFMT (sat, "sat");
+  HEADERFMT (uns, "uns");
+  HEADERFMT (dis, "d");
+  HEADERFMT (fld, "fls");
+  HEADERFMT (tio, "to");
+  HEADERFMT (meo, "mo");
+  HEADERFMT (s11, "s11");
+  HEADERFMT (si6, "s6");
+  HEADERFMT (unk, "x");
+  HEADERFMT (tim, "time");
+  HEADERFMT (wll, "real");
+  HEADERFMT (mem, "mem");
+  HEADERFMT (max, "max");
+  strcat (fmt, "\n");
 
-  if (mem && mem < 5) mem = 5;
-
+#if 0
   sprintf (fmt,
     "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
-    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, s6, unk, tim, wll, mem, max);
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, tim, wll, mem, max);
+#endif
+
   printf (fmt,
-    "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "s11", "s6", "x", "time", "real", "space", "max");
+    "", "cnt", "ok", "sat", "uns", "d", "fld", "to", "mo", "s11", "si6", "x", "time", "real", "mem", "max");
+
   sprintf (fmt,
     "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, s6, unk, tim, wll, mem, max);
+    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, tim, wll, mem, max);
+
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
     int solved = z->sat + z->unsat;
-    int failed = z->timeout + z->memout + z->sig11 + z->sig6 + z->unknown;
+    int failed = z->timeout + z->memout + z->s11 + z->si6 + z->unknown;
     assert (solved + failed + z->discrepancy == z->count);
     printf (fmt,
       z->path + skip,
       z->count, solved, z->sat, z->unsat, z->discrepancy,
-      failed, z->timeout, z->memout, z->sig11, z->sig6, z->unknown,
+      failed, z->timeout, z->memout, z->s11, z->si6, z->unknown,
       z->time, z->real, z->space, z->max);
   }
 }
