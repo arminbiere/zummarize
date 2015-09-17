@@ -793,6 +793,7 @@ SEEN_S:
   if (isdigit (ch)) {
     bound = getposnum (ch);
     if (bound < 0) goto WAIT;
+    msg (2, "found 's%d' line", bound);
     if (e->minsbound < 0 || e->minsbound > bound)
       e->minsbound = bound;
     goto START;
@@ -811,6 +812,7 @@ SEEN_U:
   if (isdigit (ch)) {
     bound = getposnum (ch);
     if (bound < 0) goto WAIT;
+    msg (2, "found 'u%d' line", bound);
     if (e->maxubound < 0 || e->maxubound < bound)
       e->maxubound = bound;
     goto START;
