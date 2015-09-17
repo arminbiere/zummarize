@@ -1388,8 +1388,12 @@ do { \
   PRINTHEADER (max, "max");
   putc ('\n', stdout);
 
-#if 1
-
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    j = nam - strlen (z->path + skip);
+    assert (j >= 0);
+    while (j-- > 0) fputc (' ', stdout);
+    fputs (z->path + skip, stdout);
 #define IPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
@@ -1405,13 +1409,6 @@ do { \
   sprintf (fmt, " %%%d.0f", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
-
-  for (i = 0; i < nzummaries; i++) {
-    Zummary * z = zummaries[i];
-    j = nam - strlen (z->path + skip);
-    assert (j >= 0);
-    while (j-- > 0) fputc (' ', stdout);
-    fputs (z->path + skip, stdout);
     IPRINTZUMMARY (cnt);
     IPRINTZUMMARY (sol);
     IPRINTZUMMARY (sat);
@@ -1429,26 +1426,6 @@ do { \
     FPRINTZUMMARY (max);
     fputc ('\n', stdout);
   }
-#else
-  {
-    char fmt[1000];
-  sprintf (fmt,
-    "%%%ds %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%dd %%%d.0f %%%d.0f %%%d.0f %%%d.0f\n",
-    nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, tim, wll, mem, max);
-
-  for (i = 0; i < nzummaries; i++) {
-    Zummary * z = zummaries[i];
-    int solved = z->sat + z->uns;
-    int failed = z->tio + z->meo + z->s11 + z->si6 + z->unk;
-    assert (solved + failed + z->dis == z->cnt);
-    printf (fmt,
-      z->path + skip,
-      z->cnt, solved, z->sat, z->uns, z->dis,
-      failed, z->tio, z->meo, z->s11, z->si6, z->unk,
-      z->tim, z->wll, z->mem, z->max);
-  }
-  }
-#endif
 }
 
 static void zummarizeall () {
