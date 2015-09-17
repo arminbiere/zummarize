@@ -36,7 +36,7 @@ typedef struct Zummary {
   double tim, wll, mem, max, tlim, rlim, slim;
 } Zummary;
 
-static int verbose, force, nowrite;
+static int verbose, force, nowrite, nobounds;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -186,7 +186,7 @@ static Zummary * newzummary (const char * path) {
   memset (res, 0, sizeof *res);
   res->path = strdup (path);
   if (!res->path) die ("out of memory copy zummary path");
-  res->tlim = res->rlim = res->slim = res->bnd = -1;
+  res->tlim = res->rlim = res->slim = -1;
   striptrailingslash (res->path);
   if (sizezummaries == nzummaries) {
     int newsize = sizezummaries ? 2*sizezummaries : 1;
@@ -929,16 +929,39 @@ DONE:
     assert (!res);
   }
   if (e->minsbnd >= 0)
-    msg (2, "found minimum sat-bnd 's%d' in '%s'", e->minsbnd, logpath);
+    msg (2, "found minimum sat-bound 's%d' in '%s'", e->minsbnd, logpath);
   if (e->maxubnd >= 0)
-    msg (2, "found maximum unsat-bnd 'u%d'", e->maxubnd, logpath);
+    msg (2, "found maximum unsat-bound 'u%d'", e->maxubnd, logpath);
+
+  if (e->minsbnd >= 0 && e->minsbnd <= e->maxubnd)
+    die ("minimum sat-bound %d <= maximum usat-bound %d in '%s'",
+      e->minsbnd, e->maxubnd, logpath);
+
+  if (e->minsbnd >= 0 && res == 20)
+    die ("minimum sat-bound %d and with unsat result line in '%s'",
+      e->minsbnd, logpath);
+
+  if (e->minsbnd >= 0 && res != 10) {
+    assert (!res);
+    wrn ("minimum sat-bound %d and no result line found in '%s' (forcing sat)",
+      e->minsbnd, logpath);
+    e->res = 10;
+  }
+
+  if (e->minsbnd >= 0) {
+    assert (e->res == 10);
+    e->bnd = e->minsbnd;
+  } else if (e->maxubnd >= 0) {
+    if (e->res) assert (e->res == 20);
+    else e->bnd = e->maxubnd;
+  }
 }
 
 static void fixzummary (Zummary * z) {
   Entry * e;
   z->sat = z->uns = z->tio = z->meo = z->unk = z->dis = 0;
   z->tim = z->wll = z->mem = z->max = 0;
-  z->s11 = z->si6 = 0;
+  z->s11 = z->si6 = z->bnd = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -985,10 +1008,12 @@ static void fixzummary (Zummary * z) {
     else if (e->meo) e->res = 2, z->meo++;
     else e->res = 3, e->unk = 1, z->unk++;
     assert (e->res);
+
     if (e->res == 10 || e->res == 20) {
       z->tim += e->tim, z->wll += e->wll, z->mem += e->mem;
       if (e->mem > z->max) z->max = e->mem;
     }
+    if (e->bnd >= 0 && e->res != 4) z->bnd++;
   }
   z->sol = z->sat + z->uns;
   z->fld = z->tio + z->meo + z->s11 + z->si6 + z->unk;
@@ -1069,7 +1094,7 @@ static void loadzummary (Zummary * z, const char * path) {
                mystrcmp (tokens[4], "tlim") ||
                mystrcmp (tokens[5], "rlim") ||
                mystrcmp (tokens[6], "slim") ||
-	       (ntokens == 8 && mystrcmp (tokens[6], "bound")))
+	       (ntokens == 8 && mystrcmp (tokens[7], "bound")))
       die ("invalid header in '%s'", path);
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->cnt, path);
@@ -1140,13 +1165,13 @@ static void writezummary (Zummary * z, const char * path) {
   file = fopen (path, "w");
   if (!file) die ("can not write '%s'", path);
   fputs (" result time real space tlim rlim slim", file);
-  if (z->bnd >= 0) fputs (" bound", file);
+  if (!nobounds && z->bnd > 0) fputs (" bound", file);
   fputc ('\n', file);
   for (e = z->first; e; e = e->next) {
     fprintf (file,
       "%s %d %.2f %.2f %.1f %.0f %.0f %.0f",
       e->name, e->res, e->tim, e->wll, e->mem, z->tlim, z->rlim, z->slim);
-    if (e->bnd >= 0) fprintf (file, " %d", e->bnd);
+    if (!nobounds && e->bnd >= 0) fprintf (file, " %d", e->bnd);
     fputc ('\n', file);
   }
   fclose (file);
@@ -1480,6 +1505,7 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "-v")) verbose++;
     else if (!strcmp (argv[i], "-f")) force++;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
+    else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
     else if (!isdir (argv[i]))
       die ("argument '%s' not a directory", argv[i]);
