@@ -1316,15 +1316,23 @@ do { \
 
 static void printzummaries () {
   char fmt[100];
-  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6, unk, dis, tim, wll, mem, max, i;
+  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6, unk, dis, tim, wll, mem, max, i, j, skip;
   cnt =  sat = uns = fld = max = s11 = 3;
   sol = tio = meo = s6 = 2;
   nam = dis = unk = 1;
   tim = wll = 4;
   mem = 5;
+  skip = nzummaries ? strlen (zummaries[0]->path) : 0;
+  for (i = 1; i < nzummaries; i++) {
+    for (j = 0; j < skip; j++)
+      if (zummaries[i]->path[j] != zummaries[0]->path[j])
+	break;
+    skip = j;
+    assert (skip <= strlen (zummaries[i]->path));
+  }
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
-    UPDATEIFLARGER (nam, strlen (z->path));
+    UPDATEIFLARGER (nam, strlen (z->path + skip));
     UPDATEIFLARGER (cnt, ilen (z->count));
     UPDATEIFLARGER (sol, ilen (z->sat + z->unsat));
     UPDATEIFLARGER (sat, ilen (z->sat));
@@ -1355,7 +1363,7 @@ static void printzummaries () {
     int failed = z->timeout + z->memout + z->sig11 + z->sig6 + z->unknown;
     assert (solved + failed + z->discrepancy == z->count);
     printf (fmt,
-      z->path,
+      z->path + skip,
       z->count, solved, z->sat, z->unsat, z->discrepancy,
       failed, z->timeout, z->memout, z->sig11, z->sig6, z->unknown,
       z->time, z->real, z->space, z->max);
