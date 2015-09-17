@@ -26,7 +26,7 @@ typedef struct Entry {
   struct Entry * next, * chain;
   char tio, meo, unk, dis, s11, si6;
   double tim, wll, mem;
-  int res, bound, maxubound, minsbound;
+  int res, bnd, maxubnd, minsbnd;
 } Entry;
 
 typedef struct Zummary {
@@ -441,7 +441,7 @@ static Entry * newentry (Zummary * z, const char * name) {
   if (!res) die ("out of memory allocating entry object");
   memset (res, 0, sizeof *res);
   res->zummary = z;
-  res->bound = res->maxubound = res->minsbound = -1;
+  res->bnd = res->maxubnd = res->minsbnd = -1;
   if (nsyms == sizesymtab) enlargesymtab ();
   h = hashstr (name) & (sizesymtab - 1);
   searches++;
@@ -741,7 +741,7 @@ static int getposnum (int ch) {
 
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
-  int found, res, ch, bound;
+  int found, res, ch, bnd;
   assert (!e->res);
   assert (!e->tio), assert (!e->meo), assert (!e->unk);
   msg (2, "parsing log file '%s'", logpath);
@@ -791,11 +791,11 @@ SEEN_S:
   assert (ch == 's');
   ch = nextch ();
   if (isdigit (ch)) {
-    bound = getposnum (ch);
-    if (bound < 0) goto WAIT;
-    msg (2, "found 's%d' line", bound);
-    if (e->minsbound < 0 || e->minsbound > bound)
-      e->minsbound = bound;
+    bnd = getposnum (ch);
+    if (bnd < 0) goto WAIT;
+    msg (2, "found 's%d' line", bnd);
+    if (e->minsbnd < 0 || e->minsbnd > bnd)
+      e->minsbnd = bnd;
     goto START;
   }
   if (ch == '\n') goto START;
@@ -810,11 +810,11 @@ SEEN_U:
   assert (ch == 'u');
   ch = nextch ();
   if (isdigit (ch)) {
-    bound = getposnum (ch);
-    if (bound < 0) goto WAIT;
-    msg (2, "found 'u%d' line", bound);
-    if (e->maxubound < 0 || e->maxubound < bound)
-      e->maxubound = bound;
+    bnd = getposnum (ch);
+    if (bnd < 0) goto WAIT;
+    msg (2, "found 'u%d' line", bnd);
+    if (e->maxubnd < 0 || e->maxubnd < bnd)
+      e->maxubnd = bnd;
     goto START;
   }
   if (ch == '\n') goto START;
@@ -928,10 +928,10 @@ DONE:
     msg (2, "no proper sat/unsat line found in '%s'", logpath);
     assert (!res);
   }
-  if (e->minsbound >= 0)
-    msg (2, "found minimum sat-bound 's%d' in '%s'", e->minsbound, logpath);
-  if (e->maxubound >= 0)
-    msg (2, "found maximum unsat-bound 'u%d'", e->maxubound, logpath);
+  if (e->minsbnd >= 0)
+    msg (2, "found minimum sat-bnd 's%d' in '%s'", e->minsbnd, logpath);
+  if (e->maxubnd >= 0)
+    msg (2, "found maximum unsat-bnd 'u%d'", e->maxubnd, logpath);
 }
 
 static void fixzummary (Zummary * z) {
@@ -1040,11 +1040,17 @@ static void loadzummary (Zummary * z, const char * path) {
 	z->slim = slim;
       } else if (z->slim != slim)
         die ("different space limit %.0f in '%s'", slim, path);
-      if (ntokens < 9 || (e->bound = atof (tokens[8])) < 0)
-	e->bound = -1;
-      msg (2,
-        "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d",
-	e->name, e->res, e->tim, e->wll, e->mem, tlim, rlim, slim, e->bound);
+      if (ntokens < 9 || (e->bnd = atof (tokens[8])) < 0)
+	e->bnd = -1;
+      if (ntokens == 9)
+	msg (2,
+	  "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d",
+	  e->name, e->res, e->tim, e->wll, e->mem, tlim, rlim, slim, e->bnd);
+      else
+	msg (2,
+	  "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f",
+	  e->name, e->res, e->tim, e->wll, e->mem, tlim, rlim, slim);
+
       if (e->res != 10 && e->res != 20) {
 	     if (e->res == 1) e->tio = 1;
 	     if (e->res == 2) e->meo = 1;
@@ -1063,8 +1069,7 @@ static void loadzummary (Zummary * z, const char * path) {
                mystrcmp (tokens[4], "tlim") ||
                mystrcmp (tokens[5], "rlim") ||
                mystrcmp (tokens[6], "slim") ||
-	       (ntokens == 8 &&
-                mystrcmp (tokens[6], "bound")))
+	       (ntokens == 8 && mystrcmp (tokens[6], "bound")))
       die ("invalid header in '%s'", path);
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->cnt, path);
@@ -1132,13 +1137,18 @@ static void updatezummary (Zummary * z) {
 static void writezummary (Zummary * z, const char * path) {
   FILE * file;
   Entry * e;
-  file = fopen (path, "w");		// TODO set this to path
+  file = fopen (path, "w");
   if (!file) die ("can not write '%s'", path);
-  fputs (" result time real space tlim rlim slim\n", file);
-  for (e = z->first; e; e = e->next)
+  fputs (" result time real space tlim rlim slim", file);
+  if (z->bnd >= 0) fputs (" bound", file);
+  fputc ('\n', file);
+  for (e = z->first; e; e = e->next) {
     fprintf (file,
-      "%s %d %.2f %.2f %.1f %.0f %.0f %.0f\n",
+      "%s %d %.2f %.2f %.1f %.0f %.0f %.0f",
       e->name, e->res, e->tim, e->wll, e->mem, z->tlim, z->rlim, z->slim);
+    if (e->bnd >= 0) fprintf (file, " %d", e->bnd);
+    fputc ('\n', file);
+  }
   fclose (file);
   msg (1, "written %d entries to zummary '%s'", z->cnt, path);
   written++;
