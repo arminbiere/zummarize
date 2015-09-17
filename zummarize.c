@@ -1315,13 +1315,14 @@ do { \
 } while (0)
 
 static void printzummaries () {
+  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6;
+  int unk, dis, tim, wll, mem, max;
+  int i, j, skip;
   char fmt[100];
-  int nam, cnt, sol, sat, uns, fld, tio, meo, s11, s6, unk, dis, tim, wll, mem, max, i, j, skip;
-  cnt =  sat = uns = fld = max = s11 = 3;
-  sol = tio = meo = s6 = 2;
-  nam = dis = unk = 1;
-  tim = wll = 4;
-  mem = 5;
+
+  nam = cnt = sol = sat = uns = fld = tio = meo = s11 = s6 = unk = 0;
+  dis = tim = wll = mem = max = 0;
+
   skip = nzummaries ? strlen (zummaries[0]->path) : 0;
   for (i = 1; i < nzummaries; i++) {
     for (j = 0; j < skip; j++)
@@ -1332,6 +1333,7 @@ static void printzummaries () {
   }
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
+
     UPDATEIFLARGER (nam, strlen (z->path + skip));
     UPDATEIFLARGER (cnt, ilen (z->count));
     UPDATEIFLARGER (sol, ilen (z->sat + z->unsat));
@@ -1348,7 +1350,30 @@ static void printzummaries () {
     UPDATEIFLARGER (wll, dlen (z->real));
     UPDATEIFLARGER (mem, dlen (z->space));
     UPDATEIFLARGER (max, dlen (z->max));
+
   }
+
+  if (cnt && cnt < 3) cnt = 3;
+  if (sat && sat < 3) sat = 3;
+  if (uns && uns < 3) uns = 3;
+  if (fld && fld < 3) fld = 3;
+  if (max && max < 3) max = 3;
+  if (s11 && s11 < 3) s11 = 3;
+
+  if (sol && sol < 2) sol = 2;
+  if (tio && tio < 2) tio = 2;
+  if (meo && meo < 2) meo = 2;
+  if (s6  && s6  < 2) s6  = 2;
+
+  if (nam && nam < 1) nam = 1;
+  if (dis && dis < 1) dis = 1;
+  if (meo && meo < 1) meo = 1;
+
+  if (tim && tim < 4) tim = 4;
+  if (wll && wll < 4) wll = 4;
+
+  if (mem && mem < 5) mem = 5;
+
   sprintf (fmt,
     "%%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds %%%ds\n",
     nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, s6, unk, tim, wll, mem, max);
