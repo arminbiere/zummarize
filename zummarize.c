@@ -110,7 +110,7 @@ static void open_input (const char * path) {
   input.opened = 1;
 }
 
-static int nextch () {
+static int reallynextch () {
   assert (input.opened);
   assert (input.top <= input.end);
   if (input.top == input.end) return EOF;
@@ -138,7 +138,7 @@ static void open_input (const char * path) {
     die ("failed to open '%s'", path);
 }
 
-static int nextch () {
+static int reallynextch () {
   assert (input);
 #ifndef NGETCUNLOCKED
   return getc_unlocked (input);
@@ -155,6 +155,21 @@ static void close_input (const char * path) {
 }
 
 #endif
+
+static int savedch = EOF, savedchvalid;
+
+static int nextch () {
+  int res;
+  if (savedchvalid) res = savedch, savedchvalid = 0;
+  else res = reallynextch ();
+  return res;
+}
+
+static void savech (int ch) {
+  assert (!savedchvalid);
+  savedchvalid = 1;
+  savedch = ch;
+}
 
 static const char * USAGE =
 "usage: zummarize [-h|-v|-f|--no-write] [ <dir> ... ]\n"
@@ -776,8 +791,39 @@ SEEN_1:
   ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "1";
-SAT:
+  if ((ch = nextch ()) != 'b') goto INVALID_WITNESS_SAVECH;
+  if ((ch = nextch ()) != '0') goto INVALID_WITNESS_SAVECH;
+  if ((ch = nextch ()) != '\n') goto INVALID_WITNESS_SAVECH;
+  bnd = -1;
+NEXT_TRACE_LINE:
   assert (ch == '\n');
+  ch = nextch ();
+  if (ch == '.') goto END_OF_WITNESS;
+  if (ch != '0' && ch != '1' && ch != 'x' && ch != '\n') goto INVALID_WITNESS_SAVECH;
+  bnd++;
+  if (ch == '\n') goto NEXT_TRACE_LINE;
+NEXT_CHAR_IN_TRACE_LINE:
+  ch = nextch ();
+  if (ch == '\n') goto NEXT_TRACE_LINE;
+  if (ch != '0' && ch != '1' && ch != 'x') goto INVALID_WITNESS_SAVECH;
+  goto NEXT_CHAR_IN_TRACE_LINE;
+END_OF_WITNESS:
+  assert (ch == '.');
+  ch = nextch ();
+  if (ch != '\n') {
+    wrn ("no new line after '.' at end of AIGER witness in '%s'", logpath);
+    goto INVALID_WITNESS_NO_SAVECH;
+  }
+  if (bnd < 0) goto INVALID_WITNESS_NO_SAVECH;
+  msg (2, "found AIGER witness of length '%d'", bnd);
+  if (e->minsbnd < 0 || e->minsbnd > bnd)
+    e->minsbnd = bnd;
+  goto SAT;
+INVALID_WITNESS_SAVECH:
+  savech (ch);
+INVALID_WITNESS_NO_SAVECH:
+  wrn ("invalid AIGER witness in '%s'", logpath);
+SAT:
   e->res = 10;
   goto RESULT;
 SEEN_S:
