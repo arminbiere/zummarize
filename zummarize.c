@@ -603,7 +603,6 @@ static int parserrfile (Entry * e, const char * errpath) {
 	msg (2, "found 'out of time' status in '%s'", errpath);
 	found[STATUS] = 1;
 	e->tio = 1;
-	res = 0;
       } else if (ntokens > 4 &&
 		 !strcmp (tokens[2], "out") &&
 		 !strcmp (tokens[3], "of") &&
@@ -611,7 +610,6 @@ static int parserrfile (Entry * e, const char * errpath) {
 	msg (2, "found 'out of memory' status in '%s'", errpath);
 	found[STATUS] = 1;
 	e->meo = 1;
-	res = 0;
       } else {
 	msg (1, "invalid status line in '%s'", errpath);
 	found[STATUS] = 1;
@@ -627,16 +625,12 @@ static int parserrfile (Entry * e, const char * errpath) {
 	found[RESULT] = 1;
 	if (!result) {
 	  msg (2, "found '0' result in '%s'", errpath);
-	  e->res = 0;
 	} else if (result == 10) {
 	  msg (2, "found '10' (SAT) result in '%s'", errpath);
-	  e->res = 10;
 	} else if (result == 20) {
 	  msg (2, "found '20' (UNSAT) result in '%s'", errpath);
-	  e->res = 20;
 	} else {
 	  msg (2, "found invalid '%d' result in '%s'", result, errpath);
-	  res = 0;
 	}
       }
     } else if (ntokens > 2 &&
@@ -694,10 +688,7 @@ static int parserrfile (Entry * e, const char * errpath) {
   FOUND (REAL,   "real:");
   FOUND (SPACE,  "space:");
   assert (checked == MAX);
-  if (!res) {
-    if (e->res) e->res = 0;
-    if (!e->tio && !e->meo && !e->unk) e->unk = 1;
-  }
+  if (!res && !e->tio && !e->meo && !e->unk) e->unk = 1;
   return res;
 }
 
@@ -741,12 +732,11 @@ static int getposnum (int ch) {
 
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
-  int found, res, ch, bnd;
+  int found, ch, bnd;
   assert (!e->res);
-  assert (!e->tio), assert (!e->meo), assert (!e->unk);
   msg (2, "parsing log file '%s'", logpath);
   open_input (logpath);
-  res = found = 0;
+  e->res = found = 0;
 START:
   ch = nextch ();
   if (ch == EOF) goto DONE;
@@ -766,7 +756,7 @@ SEEN_0:
   this = "0";
 UNSAT:
   assert (ch == '\n');
-  res = 20;
+  e->res = 20;
 RESULT:
   msg (2, "found '%s' line in '%s'", this, logpath);
   if (other) {
@@ -785,7 +775,7 @@ SEEN_1:
   this = "1";
 SAT:
   assert (ch == '\n');
-  res = 10;
+  e->res = 10;
   goto RESULT;
 SEEN_S:
   assert (ch == 's');
@@ -920,13 +910,10 @@ SEEN_S_U:
 DONE:
   close_input ();
   assert (found <= 1);
-  assert (!e->res);
-  if (other) {
-    assert (res == 10 || res == 20);
-    e->res = res;
-  } else {
+  if (other) assert (e->res == 10 || e->res == 20);
+  else {
     msg (2, "no proper sat/unsat line found in '%s'", logpath);
-    assert (!res);
+    assert (!e->res);
   }
   if (e->minsbnd >= 0)
     msg (2, "found minimum sat-bound 's%d' in '%s'", e->minsbnd, logpath);
@@ -937,22 +924,23 @@ DONE:
     die ("minimum sat-bound %d <= maximum usat-bound %d in '%s'",
       e->minsbnd, e->maxubnd, logpath);
 
-  if (e->minsbnd >= 0 && res == 20)
+  if (e->minsbnd >= 0 && e->res == 20)
     die ("minimum sat-bound %d and with unsat result line in '%s'",
       e->minsbnd, logpath);
 
-  if (e->minsbnd >= 0 && res != 10) {
-    assert (!res);
+  if (e->minsbnd >= 0 && e->res != 10) {
+    assert (!e->res);
     wrn ("minimum sat-bound %d and no result line found in '%s' (forcing sat)",
       e->minsbnd, logpath);
     e->res = 10;
   }
 
+  assert (e->bnd < 0);
   if (e->minsbnd >= 0) {
     assert (e->res == 10);
     e->bnd = e->minsbnd;
   } else if (e->maxubnd >= 0) {
-    if (e->res) assert (e->res == 20);
+    if (e->res) assert (e->res == 10 || e->res == 20);
     else e->bnd = e->maxubnd;
   }
 }
@@ -1126,9 +1114,7 @@ static void updatezummary (Zummary * z) {
       char * errpath = appendpath (z->path, errname);
       e = newentry (z, base);
       assert (isfile (errpath));
-      if (!parserrfile (e, errpath)) assert (!e->res);
-      else if (!e->res) parselogfile (e, logpath);
-      else assert (e->res == 10 || e->res == 20);
+      if (parserrfile (e, errpath)) parselogfile (e, logpath);
       free (errpath);
       assert (!e->res || e->res == 10 || e->res == 20);
       assert (!e->tio || !e->res);
@@ -1160,18 +1146,19 @@ static void updatezummary (Zummary * z) {
 }
 
 static void writezummary (Zummary * z, const char * path) {
+  int printbounds;
   FILE * file;
   Entry * e;
   file = fopen (path, "w");
   if (!file) die ("can not write '%s'", path);
   fputs (" result time real space tlim rlim slim", file);
-  if (!nobounds && z->bnd > 0) fputs (" bound", file);
+  if ((printbounds = !nobounds && z->bnd > 0)) fputs (" bound", file);
   fputc ('\n', file);
   for (e = z->first; e; e = e->next) {
     fprintf (file,
       "%s %d %.2f %.2f %.1f %.0f %.0f %.0f",
       e->name, e->res, e->tim, e->wll, e->mem, z->tlim, z->rlim, z->slim);
-    if (!nobounds && e->bnd >= 0) fprintf (file, " %d", e->bnd);
+    if (printbounds) fprintf (file, " %d", e->bnd);
     fputc ('\n', file);
   }
   fclose (file);
