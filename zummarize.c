@@ -1308,6 +1308,7 @@ static int cmpzummaries4qsort (const void * p, const void * q) {
     if ((res = cmpdouble (y->tim, z->tim))) return res;
     if ((res = cmpdouble (y->wll, z->wll))) return res;
   }
+  if ((res = cmpdouble (y->max, z->max))) return res;
   if ((res = cmpdouble (y->mem, z->mem))) return res;
   return strcmp (y->path, z->path);
 }
@@ -1391,7 +1392,6 @@ do { \
   for (I = 0; I < CHARS - LEN; I++) fputc (' ', stdout); \
   fputs (HEADER, stdout); \
 } while (0)
-
 
   PRINTHEADER (nam, "");
   PRINTHEADER (cnt, "cnt");
