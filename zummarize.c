@@ -794,7 +794,7 @@ SEEN_1:
   if ((ch = nextch ()) != 'b') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '0') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '\n') goto INVALID_WITNESS_SAVECH;
-  bnd = -1;
+  bnd = -2;
 NEXT_TRACE_LINE:
   assert (ch == '\n');
   ch = nextch ();
