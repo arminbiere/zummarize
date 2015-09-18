@@ -955,25 +955,21 @@ static void fixzummary (Zummary * z) {
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
-    assert (!e->tio), assert (!e->meo), assert (!e->unk);
-    if (e->tim > z->tlim) {
+    if (!e->tio && e->tim > z->tlim) {
       msg (1,
         "error file '%s/%s.err' actually exceeds time limit",
 	z->path, e->name);
       e->tio = 1;
-      e->res = 0;
-    } else if (e->wll > z->rlim) {
+    } else if (!e->tio && e->wll > z->rlim) {
       msg (1,
         "error file '%s/%s.err' actually exceeds real time limit",
 	z->path, e->name);
       e->tio = 1;
-      e->res = 0;
-    } else if (e->mem > z->slim) {
+    } else if (!e->meo && e->mem > z->slim) {
       msg (1,
         "error file '%s/%s.err' actually exceeds space limit",
 	z->path, e->name);
       e->meo = 1;
-      e->res = 0;
     }
   }
   for (e = z->first; e; e = e->next) {
@@ -985,9 +981,7 @@ static void fixzummary (Zummary * z) {
       else if (e->res == 5) e->s11 = 1;
       else if (e->res == 6) e->si6 = 1;
       e->res = 0;
-    } else
-      assert (e->res == 10 || e->res == 20),
-      assert (!e->meo), assert (!e->tio), assert (!e->unk);
+    } else assert (e->res == 10 || e->res == 20);
     assert (!e->tio + !e->meo + !e->unk >= 2);
          if (e->dis) e->res = 4, z->dis++;
     else if (e->s11) e->res = 5, z->s11++;
@@ -1007,7 +1001,7 @@ static void fixzummary (Zummary * z) {
   }
   z->sol = z->sat + z->uns;
   z->fld = z->tio + z->meo + z->s11 + z->si6 + z->unk;
-  assert (z->cnt == z->sol + z->fld);
+  assert (z->cnt == z->sol + z->fld + z->dis);
 }
 
 static int mystrcmp (const char * a, const char * b) {
@@ -1119,9 +1113,13 @@ static void updatezummary (Zummary * z) {
       if (parserrfile (e, errpath)) parselogfile (e, logpath);
       free (errpath);
       assert (!e->res || e->res == 10 || e->res == 20);
-      assert (!e->tio || !e->res);
-      assert (!e->meo || !e->res);
-      assert (!e->unk || !e->res);
+      if (e->tio && e->res)
+	wrn ("result %d with time-out in '%s/%s'", e->res, z->path, base);
+      if (e->meo && e->res)
+	wrn ("result %d with memory-out in '%s/%s'", e->res, z->path, base);
+      if (e->unk && e->res)
+	wrn ("result %d and unknown status in '%s/%s'",
+	  e->res, z->path, base);
     } else msg (1, "missing '%s'", logpath);
     free (logpath);
     free (logname);
@@ -1376,8 +1374,8 @@ static void printzummaries () {
     UPDATEIFLARGERLEN (s11, ilen, z->s11);
     UPDATEIFLARGERLEN (si6, ilen, z->si6);
     UPDATEIFLARGERLEN (unk, ilen, z->unk);
-    UPDATEIFLARGERLEN (tim, dlen, z->tim);
     UPDATEIFLARGERLEN (wll, dlen, z->wll);
+    UPDATEIFLARGERLEN (tim, dlen, z->tim);
     UPDATEIFLARGERLEN (mem, dlen, z->mem);
     UPDATEIFLARGERLEN (max, dlen, z->max);
   }
@@ -1399,16 +1397,16 @@ do { \
   PRINTHEADER (sol, "ok");
   PRINTHEADER (sat, "sat");
   PRINTHEADER (uns, "uns");
-  PRINTHEADER (dis, "d");
+  PRINTHEADER (dis, "dis");
   PRINTHEADER (fld, "fld");
   PRINTHEADER (tio, "to");
   PRINTHEADER (meo, "mo");
   PRINTHEADER (s11, "s11");
   PRINTHEADER (si6, "s6");
-  PRINTHEADER (unk, "x");
-  PRINTHEADER (tim, "time");
+  PRINTHEADER (unk, "uk");
   PRINTHEADER (wll, "real");
-  PRINTHEADER (mem, "mem");
+  PRINTHEADER (tim, "time");
+  PRINTHEADER (mem, "space");
   PRINTHEADER (max, "max");
   putc ('\n', stdout);
 
