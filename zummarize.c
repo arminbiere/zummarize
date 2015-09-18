@@ -25,7 +25,7 @@ typedef struct Entry {
   struct Zummary * zummary;
   struct Entry * next, * chain;
   char tio, meo, unk, dis, s11, si6;
-  double tim, wll, mem;
+  double wll, tim, mem;
   int res, bnd, maxubnd, minsbnd;
 } Entry;
 
@@ -33,7 +33,7 @@ typedef struct Zummary {
   char * path, dirty;
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd;
-  double tim, wll, mem, max, tlim, rlim, slim;
+  double wll, tim, mem, max, tlim, rlim, slim;
 } Zummary;
 
 static int verbose, force, nowrite, nobounds;
@@ -1334,10 +1334,10 @@ static int dlen (double d) {
 }
 
 static void printzummaries () {
-  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, tim, wll, mem, max;
+  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, wll, tim, mem, max;
   int i, j, skip;
 
-  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = tim = wll = mem = max = 0;
+  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = wll = tim = mem = max = 0;
 
   skip = nzummaries ? strlen (zummaries[0]->path) : 0;
   for (i = 1; i < nzummaries; i++) {
@@ -1442,8 +1442,8 @@ do { \
     IPRINTZUMMARY (s11);
     IPRINTZUMMARY (si6);
     IPRINTZUMMARY (unk);
-    FPRINTZUMMARY (tim);
     FPRINTZUMMARY (wll);
+    FPRINTZUMMARY (tim);
     FPRINTZUMMARY (mem);
     FPRINTZUMMARY (max);
     fputc ('\n', stdout);
