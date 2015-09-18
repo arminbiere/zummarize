@@ -588,7 +588,10 @@ static int parserrfile (Entry * e, const char * errpath) {
       } else if (!strcmp (tokens[2], "ok")) {
 	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
-      } else if (!strcmp (tokens[2], "signal(11)")) {
+      } else if (!strcmp (tokens[2], "signal(11)") ||
+                 (ntokens > 3 &&
+		  !strcmp (tokens[2], "segmentation") &&
+                  !strcmp (tokens[3], "fault"))) {
 	msg (2, "found 'ok' status in '%s'", errpath);
 	found[STATUS] = 1;
 	e->s11 = 1;
@@ -613,7 +616,6 @@ static int parserrfile (Entry * e, const char * errpath) {
       } else {
 	msg (1, "invalid status line in '%s'", errpath);
 	found[STATUS] = 1;
-	res = 0;
       }
     } else if (ntokens > 2 &&
 	       !strcmp (tokens[1], "result:")) {
