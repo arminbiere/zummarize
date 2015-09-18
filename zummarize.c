@@ -117,14 +117,14 @@ static int nextch () {
   return *input.top++;
 }
 
-static void close_input () {
+static void close_input (const char * path) {
   size_t bytes;
   assert (input.opened);
   bytes = input.end - input.start;
   if (munmap (input.start, bytes))
-    wrn ("failed to unmap file from memory");
+    wrn ("failed to unmap '%s' from memory", path);
   if (close (input.fd))
-    wrn ("failed to close file");
+    wrn ("failed to close file '%s'", path);
   input.opened = 0;
 }
 
@@ -147,9 +147,10 @@ static int nextch () {
 #endif
 }
 
-static void close_input () {
+static void close_input (const char * path) {
   assert (input);
-  fclose (input);
+  if (fclose (input))
+    wrn ("failed to close file '%s'", path);
   input = 0;
 }
 
@@ -679,7 +680,7 @@ static int parserrfile (Entry * e, const char * errpath) {
       }
     }
   }
-  close_input ();
+  close_input (errpath);
   checked = 0;
   FOUND (TLIM,   "time limit:");
   FOUND (RLIM,   "real time limit:");
@@ -910,7 +911,7 @@ SEEN_S_U:
   this = "s UNSATISFIABLE";
   goto UNSAT;
 DONE:
-  close_input ();
+  close_input (logpath);
   assert (found <= 1);
   if (other) assert (e->res == 10 || e->res == 20);
   else {
@@ -1082,7 +1083,7 @@ static void loadzummary (Zummary * z, const char * path) {
       die ("invalid header in '%s'", path);
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->cnt, path);
-  close_input ();
+  close_input (path);
   fixzummary (z);
   sortzummary (z);
   loaded++;
