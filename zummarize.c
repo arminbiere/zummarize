@@ -18,9 +18,11 @@ typedef struct Symbol {
   char * name;
   struct Entry * first, * last;
   struct Symbol * next;
+  int sat, uns;
 } Symbol;
 
 typedef struct Entry {
+  Symbol * symbol;
   const char * name;
   struct Zummary * zummary;
   struct Entry * next, * chain, * best;
@@ -32,7 +34,7 @@ typedef struct Entry {
 typedef struct Zummary {
   char * path;
   Entry * first, * last;
-  int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd;
+  int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd, bst, unq;
   double wll, tim, mem, max, tlim, rlim, slim;
   int only_use_for_reporting_and_do_not_write;
   char ubndbroken;
@@ -490,6 +492,7 @@ static Entry * newentry (Zummary * z, const char * name) {
     *p = s;
   }
   res->name = s->name;
+  res->symbol = s;
   if (s->last) s->last->chain = res;
   else s->first = res;
   s->last = res;
@@ -1055,6 +1058,7 @@ static void fixzummary (Zummary * z,
   z->cnt = z->sol = z->sat = z->uns = z->dis = 0;
   z->fld = z->tio = z->meo = z->s11 = z->si6 = z->unk = 0;
   z->wll = z->tim = z->mem = z->max = 0;
+  z->bnd = z->bst = z->unq = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -1079,6 +1083,16 @@ static void fixzummary (Zummary * z,
     if (satonly && (!e->best || e->best->res != 10)) continue;
     if (unsatonly && (!e->best || e->best->res != 20)) continue;
     z->cnt++;
+    if (e->best == e) {
+      assert (!e->dis);
+      z->bst++;
+      assert ((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
+      if ((e->res == 10 && e->symbol->sat == 1) ||
+          (e->res == 20 && e->symbol->uns == 1)) {
+	msg (2, "unique (SOTA) '%s/%s'", e->zummary->path, e->name);
+        z->unq++;
+      }
+    }
     assert (!e->tio + !e->meo + !e->unk >= 2);
          if (e->dis) assert (global_for_reporting_so_not_local),
 	             e->res =   4, z->dis++;
@@ -1477,8 +1491,12 @@ static void findbest () {
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
     Entry * e, * best = 0;
-    for (e = s->first; e; e = e->chain)
+    for (e = s->first; e; e = e->chain) {
       if (cmp_entry_better (e, best) < 0) best = e;
+      if (e->dis) continue;
+      if (e->res == 10) s->sat++;
+      if (e->res == 20) s->uns++;
+    }
     if (best) {
       msg (2, "best result '%s/%s.log'", best->zummary->path, best->name);
       for (e = s->first; e; e = e->chain) e->best = best;
@@ -1526,10 +1544,10 @@ static int dlen (double d) {
 }
 
 static void printzummaries () {
-  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, wll, tim, mem, max;
+  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, wll, tim, mem, max, bst, unq;
   int i, j, skip;
 
-  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = wll = tim = mem = max = 0;
+  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = wll = tim = mem = max = bst = unq = 0;
 
   skip = nzummaries ? strlen (zummaries[0]->path) : 0;
   for (i = 1; i < nzummaries; i++) {
@@ -1571,6 +1589,8 @@ do { \
     UPDATEIFLARGERLEN (tim, dlen, z->tim);
     UPDATEIFLARGERLEN (mem, dlen, z->mem);
     UPDATEIFLARGERLEN (max, dlen, z->max);
+    UPDATEIFLARGERLEN (bst, ilen, z->bst);
+    UPDATEIFLARGERLEN (unq, ilen, z->unq);
   }
 
 #define PRINTHEADER(CHARS,HEADER) \
@@ -1600,6 +1620,8 @@ do { \
   PRINTHEADER (tim, "time");
   PRINTHEADER (mem, "space");
   PRINTHEADER (max, "max");
+  PRINTHEADER (bst, "best");
+  PRINTHEADER (unq, "unique");
   putc ('\n', stdout);
 
   for (i = 0; i < nzummaries; i++) {
@@ -1640,6 +1662,8 @@ do { \
     FPRINTZUMMARY (tim);
     FPRINTZUMMARY (mem);
     FPRINTZUMMARY (max);
+    IPRINTZUMMARY (bst);
+    IPRINTZUMMARY (unq);
     fputc ('\n', stdout);
   }
 }
@@ -1653,10 +1677,8 @@ static void zummarizeall () {
   discrepancies ();
   checklimits ();
   fixzummaries ();
-  if (satonly || unsatonly) {
-    findbest ();
-    fixzummaries ();
-  }
+  findbest ();
+  fixzummaries ();
   sortzummaries ();
   printzummaries ();
 }
