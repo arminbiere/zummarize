@@ -1620,8 +1620,8 @@ do { \
   PRINTHEADER (tim, "time");
   PRINTHEADER (mem, "space");
   PRINTHEADER (max, "max");
-  PRINTHEADER (bst, "best");
-  PRINTHEADER (unq, "unique");
+  PRINTHEADER (bst, "bst");
+  PRINTHEADER (unq, "uniq");
   putc ('\n', stdout);
 
   for (i = 0; i < nzummaries; i++) {
