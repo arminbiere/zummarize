@@ -1052,9 +1052,9 @@ DONE:
 static void fixzummary (Zummary * z,
                         int global_for_reporting_so_not_local) {
   Entry * e;
-  z->sat = z->uns = z->tio = z->meo = z->unk = z->dis = 0;
-  z->tim = z->wll = z->mem = z->max = 0;
-  z->s11 = z->si6 = z->bnd = 0;
+  z->sol = z->sat = z->uns = 0;
+  z->fld = z->tio = z->meo = z->s11 = z->si6 = z->unk = 0;
+  z->wll = z->tim = z->mem = z->max = 0;
   for (e = z->first; e; e = e->next) {
     if (e->res < 10) continue;
     assert (e->res == 10 || e->res == 20);
@@ -1076,27 +1076,17 @@ static void fixzummary (Zummary * z,
     }
   }
   for (e = z->first; e; e = e->next) {
-    if (e->res < 10) {
-           if (e->res == 1) e->tio = 1;
-      else if (e->res == 2) e->meo = 1;
-      else if (e->res == 3) e->unk = 1;
-      else if (e->res == 4) e->dis = 1;
-      else if (e->res == 5) e->s11 = 1;
-      else if (e->res == 6) e->si6 = 1;
-      e->res = 0;
-    } else assert (e->res == 10 || e->res == 20);
     assert (!e->tio + !e->meo + !e->unk >= 2);
-         if (e->dis) e->res = 4, z->dis++,
-	             assert (global_for_reporting_so_not_local);
-    else if (e->s11) e->res = 5, z->s11++;
-    else if (e->si6) e->res = 6, z->si6++;
-    else if (e->res == 10) z->sat++;
-    else if (e->res == 20) z->uns++;
-    else if (e->tio) e->res = 1, z->tio++;
-    else if (e->meo) e->res = 2, z->meo++;
-    else e->res = 3, e->unk = 1, z->unk++;
+         if (e->dis) assert (global_for_reporting_so_not_local),
+	             e->res =   4, z->dis++;
+    else if (e->s11) e->res =   5, z->s11++;
+    else if (e->si6) e->res =   6, z->si6++;
+    else if (        e->res == 10) z->sat++;
+    else if (        e->res == 20) z->uns++;
+    else if (e->tio) e->res =   1, z->tio++;
+    else if (e->meo) e->res =   2, z->meo++;
+    else e->unk = 1, e->res =   3, z->unk++;
     assert (e->res);
-
     if (e->res == 10 || e->res == 20) {
       z->tim += e->tim, z->wll += e->wll, z->mem += e->mem;
       if (e->mem > z->max) z->max = e->mem;
