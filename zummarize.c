@@ -1307,8 +1307,10 @@ static void zummarizeone (const char * path) {
   }
   if (update) {
     updatezummary (z);
-    fixzummary (z, LOCAL_ZUMMARY);
-    if (!nowrite && z->cnt) writezummary (z, pathtozummary);
+    if (!nowrite && z->cnt) {
+      fixzummary (z, LOCAL_ZUMMARY);
+      writezummary (z, pathtozummary);
+    }
   }
   free (pathtozummary);
 }
