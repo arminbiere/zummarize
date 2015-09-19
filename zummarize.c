@@ -34,6 +34,7 @@ typedef struct Zummary {
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd;
   double wll, tim, mem, max, tlim, rlim, slim;
+  int only_use_for_reporting_and_do_not_write;
   char ubndbroken;
 } Zummary;
 
@@ -764,12 +765,17 @@ static int getposnum (int ch) {
   return res;
 }
 
-static void setubndbroken (Entry * e) {
-  if (!e->zummary->ubndbroken) {
-    wrn ("assuming 'u...' lines are broken in '%s'",
-      e->zummary->path);
-    e->zummary->ubndbroken = 1;
-  }
+#define UBND_LOCALLY_BROKEN 1    // Actually only used for assertion
+#define UBND_GLOBALLY_BROKEN 2   // checking and a proper warning below.
+
+static void setubndbroken (Entry * e, int broken_level) {
+  assert (broken_level == UBND_LOCALLY_BROKEN ||
+          broken_level == UBND_GLOBALLY_BROKEN);
+  if (e->zummary->ubndbroken >= broken_level) return;
+  wrn ("assuming 'u...' lines are %s broken in '%s'",
+    broken_level == UBND_GLOBALLY_BROKEN ? "globally" : "locally",
+    e->zummary->path);
+  e->zummary->ubndbroken = broken_level;
 }
 
 static void parselogfile (Entry * e, const char * logpath) {
@@ -1005,7 +1011,7 @@ DONE:
       e->minsbnd, e->maxubnd, logpath);
     wrn ("ignoring maximum unsat-bound %d in '%s'", e->maxubnd, logpath);
     e->maxubnd = -1;
-    setubndbroken (e);
+    setubndbroken (e, UBND_LOCALLY_BROKEN);
   }
 
   if (e->minsbnd >= 0 && e->res == 20)
@@ -1029,7 +1035,22 @@ DONE:
   }
 }
 
-static void fixzummary (Zummary * z) {
+/* This is a very complex function with complex contract.  It is used when
+ * writing a 'zummary' file and also after discrepancies have been checked
+ * both with respect to SAT/UNSAT status as well as to bounds.  The former
+ * usage is 'local' in the sense, that the zummary just uses its own
+ * information, and thus reflects exactly what the log and error files tell
+ * us.  It is independent of other zummaries.  In the second usage the
+ * status could change say from SAT to discrepancy due to other zummaries
+ * having an UNSAT status.  Same for the bounds.  This second usage is used
+ * for reporting only and afterwards the zummary should not be written.
+ */
+
+#define LOCAL_ZUMMARY 0	   // Actually only used
+#define GLOBAL_ZUMMARY 1   // for assertion checking.
+
+static void fixzummary (Zummary * z,
+                        int global_for_reporting_so_not_local) {
   Entry * e;
   z->sat = z->uns = z->tio = z->meo = z->unk = z->dis = 0;
   z->tim = z->wll = z->mem = z->max = 0;
@@ -1055,7 +1076,6 @@ static void fixzummary (Zummary * z) {
     }
   }
   for (e = z->first; e; e = e->next) {
-
     if (e->res < 10) {
            if (e->res == 1) e->tio = 1;
       else if (e->res == 2) e->meo = 1;
@@ -1065,9 +1085,9 @@ static void fixzummary (Zummary * z) {
       else if (e->res == 6) e->si6 = 1;
       e->res = 0;
     } else assert (e->res == 10 || e->res == 20);
-
     assert (!e->tio + !e->meo + !e->unk >= 2);
-         if (e->dis) e->res = 4, z->dis++;
+         if (e->dis) e->res = 4, z->dis++,
+	             assert (global_for_reporting_so_not_local);
     else if (e->s11) e->res = 5, z->s11++;
     else if (e->si6) e->res = 6, z->si6++;
     else if (e->res == 10) z->sat++;
@@ -1081,12 +1101,18 @@ static void fixzummary (Zummary * z) {
       z->tim += e->tim, z->wll += e->wll, z->mem += e->mem;
       if (e->mem > z->max) z->max = e->mem;
     }
-    if (z->ubndbroken && e->bnd >= 0 && e->res != 10) e->bnd = -1;
+    if (z->ubndbroken && e->bnd >= 0 && e->res != 10) {
+      if (z->ubndbroken == UBND_GLOBALLY_BROKEN)
+	assert (global_for_reporting_so_not_local);
+      e->bnd = -1;
+    }
     if (e->bnd >= 0 && e->res != 4) z->bnd++;
   }
   z->sol = z->sat + z->uns;
   z->fld = z->tio + z->meo + z->s11 + z->si6 + z->unk;
   assert (z->cnt == z->sol + z->fld + z->dis);
+  if (global_for_reporting_so_not_local)
+    z->only_use_for_reporting_and_do_not_write = 1;
 }
 
 static int mystrcmp (const char * a, const char * b) {
@@ -1169,7 +1195,6 @@ static void loadzummary (Zummary * z, const char * path) {
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->cnt, path);
   close_input (path);
-  //fixzummary (z);	// TODO not needed remove?
   sortzummary (z);
   loaded++;
 }
@@ -1235,7 +1260,6 @@ static void updatezummary (Zummary * z) {
 	die ("different space limit '%.0f' in '%s'", z->slim, z->path);
     }
   }
-  fixzummary (z);
   sortzummary (z);
   updated++;
 }
@@ -1244,6 +1268,7 @@ static void writezummary (Zummary * z, const char * path) {
   int printbounds;
   FILE * file;
   Entry * e;
+  assert (!z->only_use_for_reporting_and_do_not_write);
   file = fopen (path, "w");
   if (!file) die ("can not write '%s'", path);
   fputs (" result time real space tlim rlim slim", file);
@@ -1282,6 +1307,7 @@ static void zummarizeone (const char * path) {
   }
   if (update) {
     updatezummary (z);
+    fixzummary (z, LOCAL_ZUMMARY);
     if (!nowrite && z->cnt) writezummary (z, pathtozummary);
   }
   free (pathtozummary);
@@ -1326,7 +1352,7 @@ static void discrepancies () {
 	if (e->res == 10 || e->bnd < w->bnd) continue;
 	wrn ("unsat-bound %d in '%s' >= witness length %d in '%s'",
 	  e->bnd, e->name, w->bnd, w->name);
-	setubndbroken (e);
+	setubndbroken (e, UBND_GLOBALLY_BROKEN);
       }
     }
     if (!unsat) continue;
@@ -1386,7 +1412,7 @@ static void checklimits () {
 static void fixzummaries () {
   int i;
   for (i = 0; i < nzummaries; i++)
-    fixzummary (zummaries[i]);
+    fixzummary (zummaries[i], GLOBAL_ZUMMARY);
 }
 
 static int cmpdouble (double a, double b) {
@@ -1597,9 +1623,10 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (!strcmp (argv[i], "--sat-only")) satonly = 1;
     else if (!strcmp (argv[i], "--unsat-only")) unsatonly = 1;
-    else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
+    else if (argv[i][0] == '-')
+      die ("invalid option '%s' (try '-h')", argv[i]);
     else if (!isdir (argv[i]))
-      die ("argument '%s' not a directory", argv[i]);
+      die ("argument '%s' not a directory (try '-h')", argv[i]);
     else count++;
   }
   if (!count) die ("no directory specified (try '-h')");
