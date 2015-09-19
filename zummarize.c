@@ -35,12 +35,13 @@ typedef struct Zummary {
   char * path;
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd, bst, unq;
-  double wll, tim, mem, max, tlim, rlim, slim;
+  double wll, tim, mem, max, tlim, rlim, slim, deep;
   int only_use_for_reporting_and_do_not_write;
   char ubndbroken;
 } Zummary;
 
 static int verbose, force, allcolumns, nowrite, nobounds, satonly, unsatonly;
+static int cap = 1000;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -1436,6 +1437,44 @@ static void fixzummaries () {
     fixzummary (zummaries[i], GLOBAL_ZUMMARY);
 }
 
+static void computedeep () {
+  int i, count, unsolved;
+  count = unsolved = 0;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    count++;
+    if (s->sat) continue;
+    if (s->uns) continue;
+    msg (1, "unsolved instance '%s'", s->name);
+    unsolved++;
+  }
+  if (unsolved) {
+    msg (1, "found %d unsolved instances out of %d", unsolved, count);
+  } else msg (1, "all instances solved");
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    int capped;
+    Entry * e;
+    if (z->ubndbroken) continue;
+    z->deep = 0;
+    for (e = z->first; e; e = e->next) {
+      double inc;
+      if (e->dis) continue;
+      if ((capped = e->bnd) < 0) continue;
+      if (e->symbol->sat) continue;
+      if (e->symbol->uns) continue;
+      if (capped > cap) capped = cap;
+      inc = 1e4 - 1e4 / (capped + 2.0);
+      z->deep += inc;
+      msg (2, "unsat-bound %d capped to %d in '%s/%s' contributes %.0f",
+        e->bnd, capped, z->path, e->name, inc);
+    }
+    assert (unsolved > 0);
+    z->deep /= (double) unsolved;
+    msg (1, "deep score %.0f of '%s'", z->deep, z->path);
+  }
+}
+
 static int cmpdouble (double a, double b) {
   if (a < b) return -1;
   if (b < a) return 1;
@@ -1544,19 +1583,26 @@ static int dlen (double d) {
 }
 
 static void printzummaries () {
-  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, wll, tim, mem, max, bst, unq;
+  int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk;
+  int wll, tim, mem, max, bst, unq, deep;
   int i, j, skip;
 
-  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = wll = tim = mem = max = bst = unq = 0;
+  nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = 0;
+  wll = tim = mem = max = bst = unq = deep = 0;
 
-  skip = nzummaries ? strlen (zummaries[0]->path) : 0;
-  for (i = 1; i < nzummaries; i++) {
-    for (j = 0; j < skip; j++)
-      if (zummaries[i]->path[j] != zummaries[0]->path[j])
-	break;
-    skip = j;
-    assert (skip <= strlen (zummaries[i]->path));
-  }
+  if (nzummaries) {
+    skip = strlen (zummaries[0]->path);
+    for (i = 1; i < nzummaries; i++) {
+      for (j = 0; j < skip; j++)
+	if (zummaries[i]->path[j] != zummaries[0]->path[j])
+	  break;
+      skip = j;
+      assert (skip <= strlen (zummaries[i]->path));
+    }
+    while (skip > 0 && zummaries[0]->path[skip-1] != '/')
+      skip--;
+  } else skip = 0;
+
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
 
@@ -1591,6 +1637,7 @@ do { \
     UPDATEIFLARGERLEN (max, dlen, z->max);
     UPDATEIFLARGERLEN (bst, ilen, z->bst);
     UPDATEIFLARGERLEN (unq, ilen, z->unq);
+    UPDATEIFLARGERLEN (deep, dlen, z->deep);
   }
 
 #define PRINTHEADER(CHARS,HEADER) \
@@ -1615,13 +1662,14 @@ do { \
   PRINTHEADER (meo, "mo");
   PRINTHEADER (s11, "s11");
   PRINTHEADER (si6, "s6");
-  PRINTHEADER (unk, "uk");
+  PRINTHEADER (unk, "unk");
   PRINTHEADER (wll, "real");
   PRINTHEADER (tim, "time");
   PRINTHEADER (mem, "space");
   PRINTHEADER (max, "max");
-  PRINTHEADER (bst, "bst");
+  PRINTHEADER (bst, "best");
   PRINTHEADER (unq, "uniq");
+  PRINTHEADER (deep, "deep");
   putc ('\n', stdout);
 
   for (i = 0; i < nzummaries; i++) {
@@ -1664,6 +1712,7 @@ do { \
     FPRINTZUMMARY (max);
     IPRINTZUMMARY (bst);
     IPRINTZUMMARY (unq);
+    FPRINTZUMMARY (deep);
     fputc ('\n', stdout);
   }
 }
@@ -1679,6 +1728,7 @@ static void zummarizeall () {
   fixzummaries ();
   findbest ();
   fixzummaries ();
+  computedeep ();
   sortzummaries ();
   printzummaries ();
 }
