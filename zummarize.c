@@ -37,7 +37,7 @@ typedef struct Zummary {
   char ubndbroken;
 } Zummary;
 
-static int verbose, force, nowrite, nobounds;
+static int verbose, force, nowrite, nobounds, satonly, unsatonly;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -173,7 +173,21 @@ static void savech (int ch) {
 }
 
 static const char * USAGE =
-"usage: zummarize [-h|-v|-f|--no-write] [ <dir> ... ]\n"
+"usage: zummarize [ <option> ... ] <dir> ... \n"
+"\n"
+"where <option> is one of the following:\n"
+"\n"
+" -h             print this command line option zummary\n"
+" -v             increase verbose level (maximum 3, default 0)\n"
+" -f             recompute zummaries (do not read '<dir>/zummary' files)\n"
+" --no-write     do not write generated zummaries\n"
+" --no-bounds    do not print bounds\n"
+" --sat-only     report goes over satisfiable instances only\n"
+" --unsat-only   report goes over unsatisfiable instances only\n"
+"\n"
+"The directory arguments are considered to have '.err' files generated\n"
+"by the 'runlim' tool and '.log' files which adhere loosly to the output\n"
+"file requirements used in the SAT, SMT and HWMCC competitions.\n"
 ;
 
 static void usage () {
@@ -1570,12 +1584,20 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "-f")) force++;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
+    else if (!strcmp (argv[i], "--sat-only")) satonly = 1;
+    else if (!strcmp (argv[i], "--unsat-only")) unsatonly = 1;
     else if (argv[i][0] == '-') die ("invalid option '%s'", argv[i]);
     else if (!isdir (argv[i]))
       die ("argument '%s' not a directory", argv[i]);
     else count++;
   }
-  if (!count) die ("no directory specified");
+  if (!count) die ("no directory specified (try '-h')");
+  if (nowrite) msg (1, "will not write zummaries");
+  else msg (1, "will generate or update existing zummaries");
+  if (nobounds) msg (1, "will not write bounds");
+  else msg (1, "will write bounds if found");
+  if (satonly) msg (1, "will restrict report to satisfiable instances");
+  if (unsatonly) msg (1, "will restrict report to unsatisfiable instances");
   for (i = 1; i < argc; i++)
     if (argv[i][0] != '-')
       zummarizeone (argv[i]);
