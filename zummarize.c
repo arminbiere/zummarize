@@ -37,7 +37,7 @@ typedef struct Zummary {
   char ubndbroken;
 } Zummary;
 
-static int verbose, force, nowrite, nobounds, satonly, unsatonly;
+static int verbose, force, allcolumns, nowrite, nobounds, satonly, unsatonly;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -180,10 +180,11 @@ static const char * USAGE =
 " -h             print this command line option zummary\n"
 " -v             increase verbose level (maximum 3, default 0)\n"
 " -f             recompute zummaries (do not read '<dir>/zummary' files)\n"
-" --no-write     do not write generated zummaries\n"
-" --no-bounds    do not print bounds\n"
+" --all-columns  report all columns (even those with only zero entries)\n"
 " --sat-only     report goes over satisfiable instances only\n"
 " --unsat-only   report goes over unsatisfiable instances only\n"
+" --no-write     do not write generated zummaries\n"
+" --no-bounds    do not print bounds\n"
 "\n"
 "The directory arguments are considered to have '.err' files generated\n"
 "by the 'runlim' tool and '.log' files which adhere loosly to the output\n"
@@ -1458,17 +1459,17 @@ static void printzummaries () {
 #define UPDATEIFLARGERLEN(OLDLEN,LEN,DATA) \
   do { \
     int TMPLEN = (DATA); \
-    if (!TMPLEN) break; \
+    if (!allcolumns && !TMPLEN) break; \
     UPDATEIFLARGERAUX(OLDLEN,LEN(TMPLEN)); \
   } while (0)
 
     UPDATEIFLARGERAUX (nam, strlen (z->path + skip));
     UPDATEIFLARGERLEN (cnt, ilen, z->cnt);
-    UPDATEIFLARGERLEN (sol, ilen, z->sat + z->uns);
+    UPDATEIFLARGERLEN (sol, ilen, z->sol);
     UPDATEIFLARGERLEN (sat, ilen, z->sat);
     UPDATEIFLARGERLEN (uns, ilen, z->uns);
     UPDATEIFLARGERLEN (dis, ilen, z->dis);
-    UPDATEIFLARGERLEN (fld, ilen, z->tio + z->meo + z->unk);
+    UPDATEIFLARGERLEN (fld, ilen, z->fld);
     UPDATEIFLARGERLEN (tio, ilen, z->tio);
     UPDATEIFLARGERLEN (meo, ilen, z->meo);
     UPDATEIFLARGERLEN (s11, ilen, z->s11);
@@ -1483,7 +1484,7 @@ static void printzummaries () {
 #define PRINTHEADER(CHARS,HEADER) \
 do { \
   int LEN, I; \
-  if (!CHARS) break; \
+  if (!allcolumns && !CHARS) break; \
   LEN = strlen (HEADER); \
   if (CHARS < LEN) CHARS = LEN; \
   if (&CHARS != &nam) fputc (' ', stdout); \
@@ -1518,7 +1519,7 @@ do { \
 #define IPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
-  if (!NAME) break; \
+  if (!allcolumns && !NAME) break; \
   sprintf (fmt, " %%%dd", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
@@ -1526,7 +1527,7 @@ do { \
 #define FPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
-  if (!NAME) break; \
+  if (!allcolumns && !NAME) break; \
   sprintf (fmt, " %%%d.0f", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
@@ -1591,6 +1592,7 @@ int main (int argc, char ** argv) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
     else if (!strcmp (argv[i], "-f")) force++;
+    else if (!strcmp (argv[i], "--all-columns")) allcolumns = 1;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (!strcmp (argv[i], "--sat-only")) satonly = 1;
