@@ -749,6 +749,14 @@ static int getposnum (int ch) {
   return res;
 }
 
+static void setubndbroken (Entry * e) {
+  if (!e->zummary->ubndbroken) {
+    wrn ("assuming 'u...' lines are broken in '%s'",
+      e->zummary->path);
+    e->zummary->ubndbroken = 1;
+  }
+}
+
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
   int found, ch, bnd;
@@ -792,7 +800,14 @@ SEEN_1:
   ch = nextch ();
   if (ch != '\n') goto WAIT;
   this = "1";
-  if ((ch = nextch ()) != 'b') goto INVALID_WITNESS_SAVECH;
+START_OF_WITNESS:
+  ch = nextch ();
+  if (ch == 'c') {
+    while ((ch = nextch ()) != '\n')
+      if (ch == EOF) goto INVALID_WITNESS_SAVECH;
+    goto START_OF_WITNESS;
+  }
+  if (ch != 'b') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '0') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '\n') goto INVALID_WITNESS_SAVECH;
   bnd = -2;
@@ -973,13 +988,9 @@ DONE:
   if (e->minsbnd >= 0 && e->minsbnd <= e->maxubnd) {
     wrn ("minimum sat-bound %d <= maximum unsat-bound %d in '%s'",
       e->minsbnd, e->maxubnd, logpath);
-    wrn ("thus ignoring maximum unsat-bound %d in '%s'", e->maxubnd, logpath);
+    wrn ("ignoring maximum unsat-bound %d in '%s'", e->maxubnd, logpath);
     e->maxubnd = -1;
-    if (!e->zummary->ubndbroken) {
-      wrn ("and assuming 'u...' lines are broken in '%s'",
-        e->zummary->path);
-      e->zummary->ubndbroken = 1;
-    }
+    setubndbroken (e);
   }
 
   if (e->minsbnd >= 0 && e->res == 20)
@@ -1268,40 +1279,49 @@ static void sortsymbols () {
 }
 
 static void discrepancies () {
-  int i, count = 0;;
+  int i, count = 0;
   for (i = 0; i < nsyms; i++) {
-    Symbol * s = symtab[i];
     int sat = 0, unsat = 0, expected;
+    Symbol * s = symtab[i];
+    Entry * e, * w = 0;
     char cmp;
-    Entry * e;
     for (e = s->first; e; e = e->chain) {
       assert (e->name == s->name);
-      if (e->res == 10) sat++;
-      if (e->res == 20) unsat++;
+      if (e->res == 10) {
+	if (e->bnd >= 0 && (!w || w->bnd > e->bnd)) w = e;
+	sat++;
+      } else if (e->res == 20) unsat++;
     }
-    if (!sat) continue;
+    if (!sat) { assert (!w); continue; }
+    if (w) {
+      for (e = s->first; e; e = e->chain) {
+	assert (e->name == s->name);
+	if (e->res == 10 || e->bnd < w->bnd) continue;
+	wrn ("unsat-bound %d in '%s' >= witness length %d in '%s'",
+	  e->bnd, e->name, w->bnd, w->name);
+	setubndbroken (e);
+      }
+    }
     if (!unsat) continue;
     if (sat > unsat) expected = 10, cmp = '>';
     else if (sat < unsat) expected = 20, cmp = '<';
     else expected = 0, cmp = '=';
-    fprintf (stdout,
-      "*** zummarize: DISCREPANCY on '%s' with %d SAT %c %d UNSAT\n",
+    wrn ("DISCREPANCY on '%s' with %d SAT %c %d UNSAT\n",
       s->name, sat, cmp, unsat);
     for (e = s->first; e; e = e->chain) {
+      const char * suffix;
       if (e->res < 10) continue;
       assert (e->res == 10 || e->res == 20);
-      fprintf (stdout,
-        "*** zummarize: %s '%s/%s' %s",
+      if (!expected) suffix = " (tie so assumed wrong)";
+      else if (e->res != expected) suffix = " (overvoted so probably wrong)";
+      else suffix = "";
+      wrn ("%s '%s/%s' %s%s",
         (e->res == expected) ? " " : "!",
 	e->zummary->path, s->name, 
-	(e->res == 10 ? "SAT" : "UNSAT"));
-      if (!expected)
-	fprintf (stdout, " (unclear status so assumed wrong)");
-      if (expected && e->res != expected)
-	fprintf (stdout, " (probably wrong)");
+	(e->res == 10 ? "SAT" : "UNSAT"),
+	suffix);
       if (e->res != expected)
 	e->dis = 1, e->zummary->dirty = 1;
-      fputc ('\n', stdout);
     }
     fflush (stdout);
     count++;
