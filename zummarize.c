@@ -23,7 +23,7 @@ typedef struct Symbol {
 typedef struct Entry {
   const char * name;
   struct Zummary * zummary;
-  struct Entry * next, * chain;
+  struct Entry * next, * chain, * best;
   char tio, meo, unk, dis, s11, si6;
   double wll, tim, mem;
   int res, bnd, maxubnd, minsbnd;
@@ -1413,6 +1413,64 @@ static int cmpdouble (double a, double b) {
   return 0;
 }
 
+static int cmp_entry_resources (Entry * a, Entry * b) {
+  int res;
+  if (usereal) {
+    if ((res = cmpdouble (a->wll, b->wll))) return res;
+    if ((res = cmpdouble (a->tim, b->tim))) return res;
+  } else {
+    if ((res = cmpdouble (a->tim, b->tim))) return res;
+    if ((res = cmpdouble (a->wll, b->wll))) return res;
+  }
+  if ((res = cmpdouble (a->mem, b->mem))) return res;
+  return 0;
+}
+
+static int cmp_entry_bound (Entry * a, Entry * b) {
+  if (a->bnd < 0 && b->bnd < 0) return 0;
+  if (a->bnd >= 0 && b->bnd < 0) return -1;
+  if (a->bnd < 0 && b->bnd >= 0) return 1;
+  return a->bnd - b->bnd;
+}
+
+static int cmp_entry_better (Entry * a, Entry * b) {
+  int res;
+  if (a->dis) return 1;
+  if (a->res == 10) {
+    if (!b) return -1;
+    assert (b->res != 20);
+    if (b->res != 10) return -1;
+    if ((res = cmp_entry_resources (a, b))) return res;
+    if ((res = cmp_entry_bound (a, b))) return res;	// shorter
+  } else if (a->res == 20) {
+    if (!b) return -1;
+    assert (b->res != 10);
+    if (b->res != 20) return -1;
+    if ((res = cmp_entry_resources (a, b))) return res;
+  } else if (a->bnd < 0) return 1;
+  else if (!b) return -1;
+  else if (b->res == 10 || b->res == 20) return 1;
+  else {
+    assert (b->bnd >= 0);
+    if ((res = cmp_entry_bound (b, a))) return res;	// longer
+  }
+  return strcmp (a->zummary->path, b->zummary->path);
+}
+
+static void findbest () {
+  int i;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    Entry * e, * best = 0;
+    for (e = s->first; e; e = e->chain)
+      if (cmp_entry_better (e, best) < 0) best = e;
+    if (best) {
+      msg (2, "best result '%s/%s.log'", best->zummary->path, best->name);
+      for (e = s->first; e; e = e->chain) e->best = best;
+    } else msg (2, "no result for '%s'", s->name);
+  }
+}
+
 static int cmpzummaries4qsort (const void * p, const void * q) {
   Zummary * y = * (Zummary**) p, * z = * (Zummary**) q;
   int a = y->sat + y->uns, b = z->sat + z->uns;
@@ -1578,6 +1636,7 @@ static void zummarizeall () {
   checklimits ();
   fixzummaries ();
   sortzummaries ();
+  findbest ();
   printzummaries ();
 }
 
