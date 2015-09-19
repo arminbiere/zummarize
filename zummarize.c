@@ -1052,7 +1052,7 @@ DONE:
 static void fixzummary (Zummary * z,
                         int global_for_reporting_so_not_local) {
   Entry * e;
-  z->sol = z->sat = z->uns = 0;
+  z->cnt = z->sol = z->sat = z->uns = z->dis = 0;
   z->fld = z->tio = z->meo = z->s11 = z->si6 = z->unk = 0;
   z->wll = z->tim = z->mem = z->max = 0;
   for (e = z->first; e; e = e->next) {
@@ -1076,6 +1076,9 @@ static void fixzummary (Zummary * z,
     }
   }
   for (e = z->first; e; e = e->next) {
+    if (satonly && (!e->best || e->best->res != 10)) continue;
+    if (unsatonly && (!e->best || e->best->res != 20)) continue;
+    z->cnt++;
     assert (!e->tio + !e->meo + !e->unk >= 2);
          if (e->dis) assert (global_for_reporting_so_not_local),
 	             e->res =   4, z->dis++;
@@ -1351,7 +1354,7 @@ static void discrepancies () {
     if (sat > unsat) expected = 10, cmp = '>';
     else if (sat < unsat) expected = 20, cmp = '<';
     else expected = 0, cmp = '=';
-    wrn ("DISCREPANCY on '%s' with %d SAT %c %d UNSAT\n",
+    wrn ("DISCREPANCY on '%s' with %d SAT %c %d UNSAT",
       s->name, sat, cmp, unsat);
     for (e = s->first; e; e = e->chain) {
       const char * suffix;
@@ -1528,16 +1531,17 @@ static void printzummaries () {
     Zummary * z = zummaries[i];
 
 #define UPDATEIFLARGERAUX(OLDLEN,NEWLEN) \
-  do { \
-    int TMPAUX = (NEWLEN); \
-    if (TMPAUX > OLDLEN) OLDLEN = TMPAUX; \
-  } while (0)
+do { \
+  int TMPAUX = (NEWLEN); \
+  if (TMPAUX > OLDLEN) OLDLEN = TMPAUX; \
+} while (0)
+
 #define UPDATEIFLARGERLEN(OLDLEN,LEN,DATA) \
-  do { \
-    int TMPLEN = (DATA); \
-    if (!allcolumns && !TMPLEN) break; \
-    UPDATEIFLARGERAUX(OLDLEN,LEN(TMPLEN)); \
-  } while (0)
+do { \
+  int TMPLEN = (DATA); \
+  if (!allcolumns && !TMPLEN) break; \
+  UPDATEIFLARGERAUX(OLDLEN,LEN(TMPLEN)); \
+} while (0)
 
     UPDATEIFLARGERAUX (nam, strlen (z->path + skip));
     UPDATEIFLARGERLEN (cnt, ilen, z->cnt);
@@ -1592,6 +1596,7 @@ do { \
     assert (j >= 0);
     while (j-- > 0) fputc (' ', stdout);
     fputs (z->path + skip, stdout);
+
 #define IPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
@@ -1607,6 +1612,7 @@ do { \
   sprintf (fmt, " %%%d.0f", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
+
     IPRINTZUMMARY (cnt);
     IPRINTZUMMARY (sol);
     IPRINTZUMMARY (sat);
@@ -1635,8 +1641,11 @@ static void zummarizeall () {
   discrepancies ();
   checklimits ();
   fixzummaries ();
+  if (satonly || unsatonly) {
+    findbest ();
+    fixzummaries ();
+  }
   sortzummaries ();
-  findbest ();
   printzummaries ();
 }
 
