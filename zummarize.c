@@ -34,6 +34,7 @@ typedef struct Zummary {
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd;
   double wll, tim, mem, max, tlim, rlim, slim;
+  char ubndbroken;
 } Zummary;
 
 static int verbose, force, nowrite, nobounds;
@@ -969,9 +970,17 @@ DONE:
   if (e->maxubnd >= 0)
     msg (2, "found maximum unsat-bound 'u%d'", e->maxubnd, logpath);
 
-  if (e->minsbnd >= 0 && e->minsbnd <= e->maxubnd)
-    die ("minimum sat-bound %d <= maximum usat-bound %d in '%s'",
+  if (e->minsbnd >= 0 && e->minsbnd <= e->maxubnd) {
+    wrn ("minimum sat-bound %d <= maximum unsat-bound %d in '%s'",
       e->minsbnd, e->maxubnd, logpath);
+    wrn ("thus ignoring maximum unsat-bound %d in '%s'", e->maxubnd, logpath);
+    e->maxubnd = -1;
+    if (!e->zummary->ubndbroken) {
+      wrn ("and assuming 'u...' lines are broken in '%s'",
+        e->zummary->path);
+      e->zummary->ubndbroken = 1;
+    }
+  }
 
   if (e->minsbnd >= 0 && e->res == 20)
     die ("minimum sat-bound %d and with unsat result line in '%s'",
@@ -1044,6 +1053,7 @@ static void fixzummary (Zummary * z) {
       z->tim += e->tim, z->wll += e->wll, z->mem += e->mem;
       if (e->mem > z->max) z->max = e->mem;
     }
+    if (z->ubndbroken && e->bnd >= 0 && e->res != 10) e->bnd = -1;
     if (e->bnd >= 0 && e->res != 4) z->bnd++;
   }
   z->sol = z->sat + z->uns;
