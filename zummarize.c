@@ -1331,25 +1331,14 @@ static void discrepancies () {
   for (i = 0; i < nsyms; i++) {
     int sat = 0, unsat = 0, expected;
     Symbol * s = symtab[i];
-    Entry * e, * w = 0;
+    Entry * e;
     char cmp;
     for (e = s->first; e; e = e->chain) {
       assert (e->name == s->name);
-      if (e->res == 10) {
-	if (e->bnd >= 0 && (!w || w->bnd > e->bnd)) w = e;
-	sat++;
-      } else if (e->res == 20) unsat++;
+      if (e->res == 10) sat++;
+      if (e->res == 20) unsat++;
     }
-    if (!sat) { assert (!w); continue; }
-    if (w) {
-      for (e = s->first; e; e = e->chain) {
-	assert (e->name == s->name);
-	if (e->res == 10 || e->bnd < w->bnd) continue;
-	wrn ("unsat-bound %d in '%s' >= witness length %d in '%s'",
-	  e->bnd, e->name, w->bnd, w->name);
-	setubndbroken (e, UBND_GLOBALLY_BROKEN);
-      }
-    }
+    if (!sat) continue;
     if (!unsat) continue;
     if (sat > unsat) expected = 10, cmp = '>';
     else if (sat < unsat) expected = 20, cmp = '<';
@@ -1363,7 +1352,7 @@ static void discrepancies () {
       if (!expected) suffix = " (tie so assumed wrong)";
       else if (e->res != expected) suffix = " (overvoted so probably wrong)";
       else suffix = "";
-      wrn ("%s '%s/%s' %s%s",
+      wrn ("%s %s/%s %s%s",
         (e->res == expected) ? " " : "!",
 	e->zummary->path, s->name, 
 	(e->res == 10 ? "SAT" : "UNSAT"),
@@ -1373,8 +1362,31 @@ static void discrepancies () {
     fflush (stdout);
     count++;
   }
-  if (count) msg (1, "found %d discrepancies", count);
-  else msg (1, "no discrepancies found");
+  if (count) msg (1, "found %d result discrepancies", count);
+  else msg (1, "no result discrepancies found");
+  count = 0;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    Entry * e, * w = 0;
+    for (e = s->first; e; e = e->chain) {
+      if (e->dis) continue;
+      if (e->res != 10) continue;
+      if (e->bnd < 0) continue;
+      if (w && w->bnd <= e->bnd) continue;
+      w = e;
+    }
+    if (!w) continue;
+    for (e = s->first; e; e = e->chain) {
+      if (e->dis) continue;
+      if (e->res == 10) continue;
+      assert (e->res != 20);
+      if (e->bnd < w->bnd) continue;
+      wrn ("unsat-bound %d in '%s/%s' >= witness length %d in '%s/%s'",
+	e->bnd, e->zummary->path, e->name, 
+	w->bnd, w->zummary->path, w->name);
+      setubndbroken (e, UBND_GLOBALLY_BROKEN);
+    }
+  }
 }
 
 static void checklimits () {
