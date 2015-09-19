@@ -30,7 +30,7 @@ typedef struct Entry {
 } Entry;
 
 typedef struct Zummary {
-  char * path, dirty;
+  char * path;
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd;
   double wll, tim, mem, max, tlim, rlim, slim;
@@ -1054,6 +1054,7 @@ static void fixzummary (Zummary * z) {
     }
   }
   for (e = z->first; e; e = e->next) {
+
     if (e->res < 10) {
            if (e->res == 1) e->tio = 1;
       else if (e->res == 2) e->meo = 1;
@@ -1063,6 +1064,7 @@ static void fixzummary (Zummary * z) {
       else if (e->res == 6) e->si6 = 1;
       e->res = 0;
     } else assert (e->res == 10 || e->res == 20);
+
     assert (!e->tio + !e->meo + !e->unk >= 2);
          if (e->dis) e->res = 4, z->dis++;
     else if (e->s11) e->res = 5, z->s11++;
@@ -1151,6 +1153,7 @@ static void loadzummary (Zummary * z, const char * path) {
 	else if (e->res == 6) e->si6 = 1;
 	e->res = 0;
       }
+
     } else if (ntokens < 7 ||
                ntokens > 8 ||
                mystrcmp (tokens[0], "result") ||
@@ -1165,7 +1168,7 @@ static void loadzummary (Zummary * z, const char * path) {
     else first = 0;
   } msg (1, "loaded %d entries from '%s'", z->cnt, path);
   close_input (path);
-  fixzummary (z);
+  //fixzummary (z);	// TODO not needed remove?
   sortzummary (z);
   loaded++;
 }
@@ -1199,6 +1202,15 @@ static void updatezummary (Zummary * z) {
 	wrn ("result %d with time-out in '%s/%s'", e->res, z->path, base);
       if (e->meo && e->res)
 	wrn ("result %d with memory-out in '%s/%s'", e->res, z->path, base);
+      if (e->s11 && e->res)
+	wrn ("result %d with 'segmentation fault' in '%s/%s'",
+	  e->res, z->path, base);
+      if (e->s11 && e->res)
+	wrn ("result %d with 'segmentation fault' (s11) in '%s/%s'",
+	  e->res, z->path, base);
+      if (e->si6 && e->res)
+	wrn ("result %d with 'abort signal' (s6) in '%s/%s'",
+	  e->res, z->path, base);
       if (e->unk && e->res)
 	wrn ("result %d and unknown status in '%s/%s'",
 	  e->res, z->path, base);
@@ -1334,23 +1346,13 @@ static void discrepancies () {
 	e->zummary->path, s->name, 
 	(e->res == 10 ? "SAT" : "UNSAT"),
 	suffix);
-      if (e->res != expected)
-	e->dis = 1, e->zummary->dirty = 1;
+      if (e->res != expected) e->dis = 1;
     }
     fflush (stdout);
     count++;
   }
-  if (count) {
-    msg (1, "found %d discrepancies", count);
-    count = 0;
-    for (i = 0; i < nzummaries; i++) {
-      Zummary * z = zummaries[i];
-      if (!z->dirty) continue;
-      fixzummary (z);
-      count++;
-    }
-    msg (1, "fixed %d zummaries", count);
-  } else msg (1, "no discrepancies found");
+  if (count) msg (1, "found %d discrepancies", count);
+  else msg (1, "no discrepancies found");
 }
 
 static void checklimits () {
@@ -1378,6 +1380,12 @@ static void checklimits () {
     msg (1, "zummarizing over process time (not real time)");
     usereal = 0;
   }
+}
+
+static void fixzummaries () {
+  int i;
+  for (i = 0; i < nzummaries; i++)
+    fixzummary (zummaries[i]);
 }
 
 static int cmpdouble (double a, double b) {
@@ -1549,6 +1557,7 @@ static void zummarizeall () {
   sortsymbols ();
   discrepancies ();
   checklimits ();
+  fixzummaries ();
   sortzummaries ();
   printzummaries ();
 }
@@ -1592,6 +1601,7 @@ int main (int argc, char ** argv) {
     else count++;
   }
   if (!count) die ("no directory specified (try '-h')");
+  if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
   if (nowrite) msg (1, "will not write zummaries");
   else msg (1, "will generate or update existing zummaries");
   if (nobounds) msg (1, "will not write bounds");
