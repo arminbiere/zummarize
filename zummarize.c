@@ -40,7 +40,8 @@ typedef struct Zummary {
   char ubndbroken;
 } Zummary;
 
-static int verbose, force, allcolumns, nowrite, nobounds, satonly, unsatonly;
+static int verbose, force, allcolumns, nowrite, nobounds;
+static int satonly, unsatonly, deep;
 static int cap = 1000;
 
 static Zummary ** zummaries;
@@ -187,6 +188,7 @@ static const char * USAGE =
 " --all-columns  report all columns (even those with only zero entries)\n"
 " --sat-only     report goes over satisfiable instances only\n"
 " --unsat-only   report goes over unsatisfiable instances only\n"
+" --deep         report goes over unsolved instances only (sorted by deep)\n"
 " --no-write     do not write generated zummaries\n"
 " --no-bounds    do not print bounds\n"
 "\n"
@@ -1041,20 +1043,27 @@ DONE:
 
 /* This is a very complex function with complex contract.  It is used when
  * writing a 'zummary' file and also after discrepancies have been checked
- * both with respect to SAT/UNSAT status as well as to bounds.  The former
+ * both with respect to SAT/UNSAT status as well as to bounds, and then a
+ * third time after the best entry for an instance is determined.  The first
  * usage is 'local' in the sense, that the zummary just uses its own
  * information, and thus reflects exactly what the log and error files tell
- * us.  It is independent of other zummaries.  In the second usage the
- * status could change say from SAT to discrepancy due to other zummaries
- * having an UNSAT status.  Same for the bounds.  This second usage is used
- * for reporting only and afterwards the zummary should not be written.
+ * us.  It is independent of other zummaries, and thus the information
+ * gathered in this phase can also be written to the actual 'zummary' file.
+ * In the second usage the status could change say from SAT to discrepancy
+ * due to other zummaries having an UNSAT status.  Same for the bounds in
+ * the second usage.  After a best entry is found, in the third usage,
+ * certain information is skipped if 'satonly', 'unsatonly', or 'deep' is
+ * set.  This projects the reported stats to these corresponding cases.  It
+ * also allows to compute 'best' and 'unique' stats.  Starting with the
+ * second usage the information gathered this function is used for reporting
+ * only and thus afterwards a 'zummary' should not be written.
  */
 
-#define LOCAL_ZUMMARY 0	   // Actually only used
-#define GLOBAL_ZUMMARY 1   // for assertion checking.
+#define LOCAL_ZUMMARY 0
+#define GLOBAL_ZUMMARY_DO_NOT_HAVE_BEST 1 
+#define GLOBAL_ZUMMARY_HAVE_BEST 2
 
-static void fixzummary (Zummary * z,
-                        int global_for_reporting_so_not_local) {
+static void fixzummary (Zummary * z, int zummary_mode) {
   Entry * e;
   z->cnt = z->sol = z->sat = z->uns = z->dis = 0;
   z->fld = z->tio = z->meo = z->s11 = z->si6 = z->unk = 0;
@@ -1081,21 +1090,29 @@ static void fixzummary (Zummary * z,
     }
   }
   for (e = z->first; e; e = e->next) {
-    if (satonly && (!e->best || e->best->res != 10)) continue;
-    if (unsatonly && (!e->best || e->best->res != 20)) continue;
-    z->cnt++;
-    if (e->best == e) {
-      assert (!e->dis);
-      z->bst++;
-      assert ((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
-      if ((e->res == 10 && e->symbol->sat == 1) ||
-          (e->res == 20 && e->symbol->uns == 1)) {
-	msg (2, "unique (SOTA) '%s/%s'", e->zummary->path, e->name);
-        z->unq++;
+    if (zummary_mode == GLOBAL_ZUMMARY_HAVE_BEST) {
+      if (satonly && (!e->best || e->best->res != 10)) continue;
+      if (unsatonly && (!e->best || e->best->res != 20)) continue;
+      if (deep) {
+	if (e->best) {
+	  if (e->best->res == 10) continue;
+	  if (e->best->res == 20) continue;
+	}
+      }
+      if (e->best == e) {
+	assert (!e->dis);
+	z->bst++;
+	assert ((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
+	if ((e->res == 10 && e->symbol->sat == 1) ||
+	    (e->res == 20 && e->symbol->uns == 1)) {
+	  msg (2, "unique (SOTA) '%s/%s'", e->zummary->path, e->name);
+	  z->unq++;
+	}
       }
     }
+    z->cnt++;
     assert (!e->tio + !e->meo + !e->unk >= 2);
-         if (e->dis) assert (global_for_reporting_so_not_local),
+         if (e->dis) assert (zummary_mode != LOCAL_ZUMMARY),
 	             e->res =   4, z->dis++;
     else if (e->s11) e->res =   5, z->s11++;
     else if (e->si6) e->res =   6, z->si6++;
@@ -1111,7 +1128,7 @@ static void fixzummary (Zummary * z,
     }
     if (z->ubndbroken && e->bnd >= 0 && e->res != 10) {
       if (z->ubndbroken == UBND_GLOBALLY_BROKEN)
-	assert (global_for_reporting_so_not_local);
+	assert (zummary_mode != LOCAL_ZUMMARY);
       e->bnd = -1;
     }
     if (e->bnd >= 0 && e->res != 4) z->bnd++;
@@ -1119,7 +1136,7 @@ static void fixzummary (Zummary * z,
   z->sol = z->sat + z->uns;
   z->fld = z->tio + z->meo + z->s11 + z->si6 + z->unk;
   assert (z->cnt == z->sol + z->fld + z->dis);
-  if (global_for_reporting_so_not_local)
+  if (zummary_mode != LOCAL_ZUMMARY)
     z->only_use_for_reporting_and_do_not_write = 1;
 }
 
@@ -1431,10 +1448,10 @@ static void checklimits () {
   }
 }
 
-static void fixzummaries () {
+static void fixzummaries (int zummary_mode) {
   int i;
   for (i = 0; i < nzummaries; i++)
-    fixzummary (zummaries[i], GLOBAL_ZUMMARY);
+    fixzummary (zummaries[i], zummary_mode);
 }
 
 static void computedeep () {
@@ -1547,6 +1564,10 @@ static int cmpzummaries4qsort (const void * p, const void * q) {
   Zummary * y = * (Zummary**) p, * z = * (Zummary**) q;
   int a = y->sat + y->uns, b = z->sat + z->uns;
   int res = b - a;
+       if (satonly)   res = z->sat - y->sat;
+  else if (unsatonly) res = z->uns - y->uns;
+  else if (deep)      res = cmpdouble (z->deep, y->deep);
+  else                res = (z->sat + z->uns) - (y->sat + y->uns);
   if (res) return res;
   if (usereal) {
     if ((res = cmpdouble (y->wll, z->wll))) return res;
@@ -1725,9 +1746,9 @@ static void zummarizeall () {
   sortsymbols ();
   discrepancies ();
   checklimits ();
-  fixzummaries ();
+  fixzummaries (GLOBAL_ZUMMARY_DO_NOT_HAVE_BEST);
   findbest ();
-  fixzummaries ();
+  fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
   computedeep ();
   sortzummaries ();
   printzummaries ();
@@ -1766,6 +1787,7 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (!strcmp (argv[i], "--sat-only")) satonly = 1;
+    else if (!strcmp (argv[i], "--deep")) deep = 1;
     else if (!strcmp (argv[i], "--unsat-only")) unsatonly = 1;
     else if (argv[i][0] == '-')
       die ("invalid option '%s' (try '-h')", argv[i]);
