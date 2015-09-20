@@ -40,7 +40,7 @@ typedef struct Zummary {
   char ubndbroken;
 } Zummary;
 
-static int verbose, force, allcolumns, nowrite, nobounds;
+static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deep;
 static int cap = 1000;
 
@@ -185,10 +185,10 @@ static const char * USAGE =
 " -h             print this command line option zummary\n"
 " -v             increase verbose level (maximum 3, default 0)\n"
 " -f             recompute zummaries (do not read '<dir>/zummary' files)\n"
-" --all-columns  report all columns (even those with only zero entries)\n"
-" --sat-only     report goes over satisfiable instances only\n"
-" --unsat-only   report goes over unsatisfiable instances only\n"
-" --deep         report goes over unsolved instances only (sorted by deep)\n"
+" -a|--all       report all column and rows (even with zero entries)\n"
+" -s|--sat       report goes over satisfiable instances only\n"
+" -u|--unsat     report goes over unsatisfiable instances only\n"
+" -d|--deep      report goes over unsolved instances only (sorted by deep)\n"
 " --no-write     do not write generated zummaries\n"
 " --no-bounds    do not print bounds\n"
 "\n"
@@ -1636,7 +1636,7 @@ do { \
 #define UPDATEIFLARGERLEN(OLDLEN,LEN,DATA) \
 do { \
   int TMPLEN = (DATA); \
-  if (!allcolumns && !TMPLEN) break; \
+  if (!printall && !TMPLEN) break; \
   UPDATEIFLARGERAUX(OLDLEN,LEN(TMPLEN)); \
 } while (0)
 
@@ -1664,7 +1664,7 @@ do { \
 #define PRINTHEADER(CHARS,HEADER) \
 do { \
   int LEN, I; \
-  if (!allcolumns && !CHARS) break; \
+  if (!printall && !CHARS) break; \
   LEN = strlen (HEADER); \
   if (CHARS < LEN) CHARS = LEN; \
   if (&CHARS != &nam) fputc (' ', stdout); \
@@ -1695,6 +1695,9 @@ do { \
 
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
+    if (!printall && satonly && !z->sat) continue;
+    if (!printall && unsatonly && !z->uns) continue;
+    if (!printall && deep && !z->deep) continue;
     j = nam - strlen (z->path + skip);
     assert (j >= 0);
     while (j-- > 0) fputc (' ', stdout);
@@ -1703,7 +1706,7 @@ do { \
 #define IPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
-  if (!allcolumns && !NAME) break; \
+  if (!printall && !NAME) break; \
   sprintf (fmt, " %%%dd", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
@@ -1711,7 +1714,7 @@ do { \
 #define FPRINTZUMMARY(NAME) \
 do { \
   char fmt[20]; \
-  if (!allcolumns && !NAME) break; \
+  if (!printall && !NAME) break; \
   sprintf (fmt, " %%%d.0f", NAME); \
   printf (fmt, z->NAME); \
 } while (0)
@@ -1738,6 +1741,27 @@ do { \
   }
 }
 
+static void printdeep () {
+  int i, unsolved;
+  FILE * file;
+  unsolved = 0;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    if (s->sat) continue;
+    if (s->uns) continue;
+    unsolved++;
+  }
+  printf ("\nused the following %d unsolved instances:\n\n", unsolved);
+  file = popen ("fmt", "w");
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    if (s->sat) continue;
+    if (s->uns) continue;
+    fprintf (file, "%s\n", s->name);
+  }
+  pclose (file);
+}
+
 static void zummarizeall () {
   msg (2,
     "%u benchmarks (%llu searched, %llu collisions %.2f on average)",
@@ -1752,6 +1776,7 @@ static void zummarizeall () {
   computedeep ();
   sortzummaries ();
   printzummaries ();
+  if (deep) printdeep ();
 }
 
 static void reset () {
@@ -1783,12 +1808,16 @@ int main (int argc, char ** argv) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
     else if (!strcmp (argv[i], "-f")) force++;
-    else if (!strcmp (argv[i], "--all-columns")) allcolumns = 1;
+    else if (!strcmp (argv[i], "--all") ||
+             !strcmp (argv[i], "-a")) printall = 1;
+    else if (!strcmp (argv[i], "--sat") ||
+             !strcmp (argv[i], "-s")) satonly = 1;
+    else if (!strcmp (argv[i], "--unsat") ||
+             !strcmp (argv[i], "-u")) unsatonly = 1;
+    else if (!strcmp (argv[i], "--deep") ||
+             !strcmp (argv[i], "-d")) deep = 1;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
-    else if (!strcmp (argv[i], "--sat-only")) satonly = 1;
-    else if (!strcmp (argv[i], "--deep")) deep = 1;
-    else if (!strcmp (argv[i], "--unsat-only")) unsatonly = 1;
     else if (argv[i][0] == '-')
       die ("invalid option '%s' (try '-h')", argv[i]);
     else if (!isdir (argv[i]))
