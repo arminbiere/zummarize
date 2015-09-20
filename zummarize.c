@@ -41,7 +41,7 @@ typedef struct Zummary {
 } Zummary;
 
 static int verbose, force, printall, nowrite, nobounds;
-static int satonly, unsatonly, deep;
+static int satonly, unsatonly, deeponly;
 static int cap = 1000;
 
 static Zummary ** zummaries;
@@ -1093,7 +1093,7 @@ static void fixzummary (Zummary * z, int zummary_mode) {
     if (zummary_mode == GLOBAL_ZUMMARY_HAVE_BEST) {
       if (satonly && (!e->best || e->best->res != 10)) continue;
       if (unsatonly && (!e->best || e->best->res != 20)) continue;
-      if (deep) {
+      if (deeponly) {
 	if (e->best) {
 	  if (e->best->res == 10) continue;
 	  if (e->best->res == 20) continue;
@@ -1486,8 +1486,7 @@ static void computedeep () {
       msg (2, "unsat-bound %d capped to %d in '%s/%s' contributes %.0f",
         e->bnd, capped, z->path, e->name, inc);
     }
-    assert (unsolved > 0);
-    z->deep /= (double) unsolved;
+    if (unsolved > 0) z->deep /= (double) unsolved;
     msg (1, "deep score %.0f of '%s'", z->deep, z->path);
   }
 }
@@ -1566,7 +1565,7 @@ static int cmpzummaries4qsort (const void * p, const void * q) {
   int res = b - a;
        if (satonly)   res = z->sat - y->sat;
   else if (unsatonly) res = z->uns - y->uns;
-  else if (deep)      res = cmpdouble (z->deep, y->deep);
+  else if (deeponly)  res = cmpdouble (z->deep, y->deep);
   else                res = (z->sat + z->uns) - (y->sat + y->uns);
   if (res) return res;
   if (usereal) {
@@ -1636,7 +1635,7 @@ do { \
 #define UPDATEIFLARGERLEN(OLDLEN,LEN,DATA) \
 do { \
   int TMPLEN = (DATA); \
-  if (!printall && !TMPLEN) break; \
+  if (!TMPLEN) break; \
   UPDATEIFLARGERAUX(OLDLEN,LEN(TMPLEN)); \
 } while (0)
 
@@ -1697,7 +1696,7 @@ do { \
     Zummary * z = zummaries[i];
     if (!printall && satonly && !z->sat) continue;
     if (!printall && unsatonly && !z->uns) continue;
-    if (!printall && deep && !z->deep) continue;
+    if (!printall && deeponly && !z->deep) continue;
     j = nam - strlen (z->path + skip);
     assert (j >= 0);
     while (j-- > 0) fputc (' ', stdout);
@@ -1776,7 +1775,7 @@ static void zummarizeall () {
   computedeep ();
   sortzummaries ();
   printzummaries ();
-  if (deep) printdeep ();
+  if (deeponly) printdeep ();
 }
 
 static void reset () {
@@ -1815,7 +1814,7 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "--unsat") ||
              !strcmp (argv[i], "-u")) unsatonly = 1;
     else if (!strcmp (argv[i], "--deep") ||
-             !strcmp (argv[i], "-d")) deep = 1;
+             !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (argv[i][0] == '-')
