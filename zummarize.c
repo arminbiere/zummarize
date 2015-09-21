@@ -1041,6 +1041,8 @@ DONE:
   }
 }
 
+static int cmp_entry_better (Entry *, Entry *);
+
 /* This is a very complex function with complex contract.  It is used when
  * writing a 'zummary' file and also after discrepancies have been checked
  * both with respect to SAT/UNSAT status as well as to bounds, and then a
@@ -1099,7 +1101,8 @@ static void fixzummary (Zummary * z, int zummary_mode) {
 	  if (e->best->res == 20) continue;
 	}
       }
-      if (e->best == e) {
+      if (e->best == e ||
+	  (e->best && !cmp_entry_better (e, e->best))) {
 	assert (!e->dis);
 	z->bst++;
 	assert ((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
@@ -1517,28 +1520,52 @@ static int cmp_entry_bound (Entry * a, Entry * b) {
   return a->bnd - b->bnd;
 }
 
-static int cmp_entry_better (Entry * a, Entry * b) {
+static int cmp_entry_better_aux (Entry * a, Entry * b) {
   int res;
-  if (a->dis) return 1;
-  if (a->res == 10) {
-    if (!b) return -1;
-    assert (b->res != 20);
-    if (b->res != 10) return -1;
+  if (a && a->dis) a = 0;
+  if (b && b->dis) b = 0;
+  if (a && a->res < 10 && a->bnd < 0) a = 0;
+  if (b && b->res < 10 && b->bnd < 0) b = 0;
+  if (!a && !b) return 0;
+  if (!a) {
+    assert (b);
+    assert (!b->dis);
+    assert (b->res >= 10 || b->bnd >= 0);
+    return 1;
+  }
+  if (!b) {
+    assert (a);
+    assert (!a->dis);
+    assert (a->res >= 10 || a->bnd >= 0);
+    return -1;
+  }
+  assert (b);
+  assert (!b->dis);
+  assert (b->res >= 10 || b->bnd >= 0);
+  assert (a);
+  assert (!a->dis);
+  assert (a->res >= 10 || a->bnd >= 0);
+  if (a->res == 10 && b->res == 10) {
     if ((res = cmp_entry_resources (a, b))) return res;
     if ((res = cmp_entry_bound (a, b))) return res;	// shorter
-  } else if (a->res == 20) {
-    if (!b) return -1;
-    assert (b->res != 10);
-    if (b->res != 20) return -1;
-    if ((res = cmp_entry_resources (a, b))) return res;
-  } else if (a->bnd < 0) return 1;
-  else if (!b) return -1;
-  else if (b->res == 10 || b->res == 20) return 1;
-  else {
-    assert (b->bnd >= 0);
-    if ((res = cmp_entry_bound (b, a))) return res;	// longer
+    return 0;
   }
-  return strcmp (a->zummary->path, b->zummary->path);
+  if (a->res == 20 && b->res == 20) {
+    if ((res = cmp_entry_resources (a, b))) return res;
+    return 0;
+  }
+  if (a->res >= 10) { assert (b->res < 10); return -1; }
+  if (b->res >= 10) { assert (a->res < 10); return 1; }
+  assert (a->res < 10);
+  assert (b->res < 10);
+  if ((res = cmp_entry_bound (b, a))) return res;	// longer
+  return 0;
+}
+
+static int cmp_entry_better (Entry * a, Entry * b) {
+  int res = cmp_entry_better_aux (a, b);
+  assert (!res || cmp_entry_better_aux (b, a) == -res);
+  return res;
 }
 
 static void findbest () {
@@ -1547,8 +1574,8 @@ static void findbest () {
     Symbol * s = symtab[i];
     Entry * e, * best = 0;
     for (e = s->first; e; e = e->chain) {
-      if (cmp_entry_better (e, best) < 0) best = e;
       if (e->dis) continue;
+      if (cmp_entry_better (e, best) < 0) best = e;
       if (e->res == 10) s->sat++;
       if (e->res == 20) s->uns++;
     }
