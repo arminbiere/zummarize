@@ -1564,7 +1564,7 @@ static int cmp_entry_better_aux (Entry * a, Entry * b) {
 
 static int cmp_entry_better (Entry * a, Entry * b) {
   int res = cmp_entry_better_aux (a, b);
-  assert (!res || cmp_entry_better_aux (b, a) == -res);
+  assert (cmp_entry_better_aux (b, a) == -res);
   return res;
 }
 
