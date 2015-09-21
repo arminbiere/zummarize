@@ -834,7 +834,7 @@ START_OF_WITNESS:
       if (ch == EOF) goto INVALID_WITNESS_SAVECH;
     goto START_OF_WITNESS;
   }
-  if (ch != 'b') goto INVALID_WITNESS_SAVECH;
+  if (ch != 'b' && ch != 'j') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '0') goto INVALID_WITNESS_SAVECH;
   if ((ch = nextch ()) != '\n') goto INVALID_WITNESS_SAVECH;
   bnd = -2;
