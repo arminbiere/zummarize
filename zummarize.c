@@ -1778,6 +1778,7 @@ static void printdeep () {
     unsolved++;
   }
   printf ("\nused the following %d unsolved instances:\n\n", unsolved);
+  fflush (stdout);
   file = popen ("fmt", "w");
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
@@ -1847,7 +1848,7 @@ int main (int argc, char ** argv) {
     else if (argv[i][0] == '-')
       die ("invalid option '%s' (try '-h')", argv[i]);
     else if (!isdir (argv[i]))
-      die ("argument '%s' not a directory (try '-h')", argv[i]);
+      wrn ("argument '%s' not a directory (try '-h')", argv[i]);
     else count++;
   }
   if (!count) die ("no directory specified (try '-h')");
@@ -1859,7 +1860,7 @@ int main (int argc, char ** argv) {
   if (satonly) msg (1, "will restrict report to satisfiable instances");
   if (unsatonly) msg (1, "will restrict report to unsatisfiable instances");
   for (i = 1; i < argc; i++)
-    if (argv[i][0] != '-')
+    if (argv[i][0] != '-' && isdir (argv[i]))
       zummarizeone (argv[i]);
   zummarizeall ();
   reset ();
