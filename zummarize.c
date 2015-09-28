@@ -42,6 +42,7 @@ typedef struct Zummary {
 
 static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deeponly, cactus;
+static const char * title;
 static int cap = 1000;
 
 static Zummary ** zummaries;
@@ -182,18 +183,20 @@ static const char * USAGE =
 "\n"
 "where <option> is one of the following:\n"
 "\n"
-" -h             print this command line option zummary\n"
-" -v             increase verbose level (maximum 3, default 0)\n"
-" -f             recompute zummaries (do not read '<dir>/zummary' files)\n"
+"-h             print this command line option zummary\n"
+"-v             increase verbose level (maximum 3, default 0)\n"
+"-f             recompute zummaries (do not read '<dir>/zummary' files)\n"
 "\n"
-" -a|--all       report all column and rows (even with zero entries)\n"
-" -s|--sat       report goes over satisfiable instances only\n"
-" -u|--unsat     report goes over unsatisfiable instances only\n"
-" -d|--deep      report goes over unsolved instances only (sorted by deep)\n"
-" -c|-cactus     generate cactus\n"
+"-a|--all       report all column and rows (even with zero entries)\n"
+"-s|--sat       report goes over satisfiable instances only\n"
+"-u|--unsat     report goes over unsatisfiable instances only\n"
+"-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
+"-c|--cactus    generate cactus\n"
 "\n"
-" --no-write     do not write generated zummaries\n"
-" --no-bounds    do not print bounds\n"
+"-t <title> | --title <title>\n"
+"\n"
+"--no-write     do not write generated zummaries\n"
+"--no-bounds    do not print bounds\n"
 "\n"
 "The directory arguments are considered to have '.err' files generated\n"
 "by the 'runlim' tool and '.log' files which adhere loosly to the output\n"
@@ -1804,6 +1807,7 @@ static void printcactus () {
   char prefix[80], rscriptpath[100], pdfpath[100], cmd[200];
   int i, c, skip = skiprefixlength ();
   FILE * rscriptfile;
+  Zummary * z;
 #if 0
   sprintf (prefix, "/tmp/zummarize-print-cactus-%d", getpid ());
 #else
@@ -1814,9 +1818,9 @@ static void printcactus () {
   if (!(rscriptfile = fopen (rscriptpath, "w")))
     die ("can not open '%s' for writing", rscriptpath);
   c = 0;
-  fprintf (rscriptfile, "pdf (\"%s\",width=10)\n", pdfpath);
+  fprintf (rscriptfile, "pdf (\"%s\",height=5,width=9)\n", pdfpath);
   for (i = 0; i < nzummaries; i++) {
-    Zummary * z = zummaries[i];
+    z = zummaries[i];
     int printed;
     Entry * e;
     if (satonly && !z->sat) continue;
@@ -1841,20 +1845,30 @@ static void printcactus () {
       "z%d = sort (z%d[z%d < %.2f])\n",
       c, c, c, usereal ? z->rlim : z->tlim);
     if (c == 1) {
-      fprintf (rscriptfile, "par(mar=c(2.5,2.5,.5,.5))\n");
+      if (title) fprintf (rscriptfile, "par (mar=c(2.5,2.5,1.5,.5))\n");
+      else fprintf (rscriptfile, "par (mar=c(2.5,2.5,.5,.5))\n");
       fprintf (rscriptfile,
-        "plot (c(0,%d+10),c(0,%.2f+100),col=0,xlab=\"\",ylab=\"\",main=\"\")\n",
-	z->sol, usereal ? z->rlim : z->tlim);
+        "plot (c(0,%d+10),c(0,%.2f+100),col=0,xlab=\"\",ylab=\"\",main=\"%s\")\n",
+	z->sol, usereal ? z->rlim : z->tlim, title ? title : "");
       fprintf (rscriptfile,
         "abline (%.0f, 0,lty=3)\n",
 	usereal ? z->rlim : z->tlim);
     }
     fprintf (rscriptfile, "points (z%d,col=%d,pch=%d,type=\"o\")\n", c, c, c);
   }
+  if (nzummaries) {
+    z = zummaries[0];
+#if 1
+    fprintf (rscriptfile,
+      "legend (x=0,y=%.0f-100,legend=c(",
+      usereal ? z->rlim : z->tlim);
+#else
+    fprintf (rscriptfile, "legend (x=\"topleft\",c(");
+#endif
+  }
   c = 0;
-  fprintf (rscriptfile, "legend (x=\"topleft\",c(");
   for (i = 0; i < nzummaries; i++) {
-    Zummary * z = zummaries[i];
+    z = zummaries[i];
     if (satonly && !z->sat) continue;
     if (unsatonly && !z->uns) continue;
     if (deeponly && !z->deep) continue;
@@ -1936,7 +1950,12 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--cactus") ||
              !strcmp (argv[i], "-c")) cactus = 1;
-    else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
+    else if (!strcmp (argv[i], "--title") ||
+             !strcmp (argv[i], "-t")) {
+      if (title) die ("title multiply defined");
+      if (i + 1 == argc) die ("argument to '%s' missing", argv[i]);
+      title = argv[++i];
+    } else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (argv[i][0] == '-')
       die ("invalid option '%s' (try '-h')", argv[i]);
@@ -1946,6 +1965,7 @@ int main (int argc, char ** argv) {
   }
   if (!count) die ("no directory specified (try '-h')");
   if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
+  if (title && !cactus) die ("title defined without cactus");
   if (nowrite) msg (1, "will not write zummaries");
   else msg (1, "will generate or update existing zummaries");
   if (nobounds) msg (1, "will not write bounds");
