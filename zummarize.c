@@ -1834,13 +1834,15 @@ static void printcactus () {
     printed = 0;
     for (e = z->first; e; e = e->next) {
       double t;
-      if (e->res != 10 && e->res != 20) continue;
+      if (!deeponly && e->res != 10 && e->res != 20) continue;
       if (unsatonly && e->res != 20) continue;
       if (satonly && e->res != 10) continue;
+      if (deeponly && e->bnd < 0) continue;
       t = usereal ? e->wll : e->tim;
       if (printed++) fprintf (rscriptfile, ",");
       else fprintf (rscriptfile, "c(");
-      fprintf (rscriptfile, "%.2f", t);
+      if (deeponly) fprintf (rscriptfile, "%d", e->bnd);
+      else fprintf (rscriptfile, "%.2f", t);
     }
     fprintf (rscriptfile, ")\n");
     fprintf (rscriptfile, "z%d = sort (z%d)\n", c, c);
