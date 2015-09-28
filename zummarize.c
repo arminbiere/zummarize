@@ -42,7 +42,7 @@ typedef struct Zummary {
 
 static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deeponly, cactus;
-static const char * title;
+static const char * title, * outputpath;
 static int cap = 1000;
 
 static Zummary ** zummaries;
@@ -193,7 +193,9 @@ static const char * USAGE =
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
 "-c|--cactus    generate cactus\n"
 "\n"
-"-t <title> | --title <title>\n"
+"-o <output>\n"
+"-t <title>\n"
+"--title <title>\n"
 "\n"
 "--no-write     do not write generated zummaries\n"
 "--no-bounds    do not print bounds\n"
@@ -1804,17 +1806,18 @@ static void printdeep () {
 }
 
 static void printcactus () {
-  char prefix[80], rscriptpath[100], pdfpath[100], cmd[200];
+  char prefix[80], rscriptpath[100], pdfpathbuf[100], cmd[200];
   int i, c, skip = skiprefixlength ();
+  const char * pdfpath;
   FILE * rscriptfile;
   Zummary * z;
-#if 0
-  sprintf (prefix, "/tmp/zummarize-print-cactus-%d", getpid ());
-#else
   sprintf (prefix, "/tmp/zummarize-print-cactus-nopidyet");
-#endif
   sprintf (rscriptpath, "%s.rscript", prefix);
-  sprintf (pdfpath, "%s.pdf", prefix);
+  if (outputpath) pdfpath = outputpath;
+  else {
+    sprintf (pdfpathbuf, "%s.pdf", prefix);
+    pdfpath = pdfpathbuf;
+  }
   if (!(rscriptfile = fopen (rscriptpath, "w")))
     die ("can not open '%s' for writing", rscriptpath);
   c = 0;
@@ -1879,9 +1882,6 @@ static void printcactus () {
   printf ("%s\n", cmd);
   system (cmd);
   fflush (stdout);
-#if 0
-  unlink (rscriptpath);
-#endif
 }
 
 static void zummarizeall () {
@@ -1943,7 +1943,10 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--cactus") ||
              !strcmp (argv[i], "-c")) cactus = 1;
-    else if (!strcmp (argv[i], "--title") ||
+    else if (!strcmp (argv[i], "-t")) {
+      if (outputpath) die ("multiple output paths specified");
+      outputpath = argv[i];
+    } else if (!strcmp (argv[i], "--title") ||
              !strcmp (argv[i], "-t")) {
       if (title) die ("title multiply defined");
       if (i + 1 == argc) die ("argument to '%s' missing", argv[i]);
