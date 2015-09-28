@@ -1821,7 +1821,7 @@ static void printcactus () {
   if (!(rscriptfile = fopen (rscriptpath, "w")))
     die ("can not open '%s' for writing", rscriptpath);
   c = 0;
-  fprintf (rscriptfile, "pdf (\"%s\",height=5,width=9)\n", pdfpath);
+  fprintf (rscriptfile, "pdf (\"%s\",height=5,width=8)\n", pdfpath);
   for (i = 0; i < nzummaries; i++) {
     z = zummaries[i];
     int printed;
