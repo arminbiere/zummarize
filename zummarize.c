@@ -1834,16 +1834,13 @@ static void printcactus () {
       if (e->res != 10 && e->res != 20) continue;
       if (unsatonly && e->res != 20) continue;
       if (satonly && e->res != 10) continue;
-      if (usereal) t = e->wll, assert (t < z->rlim);
-      else t = e->tim, assert (t < z->tlim);
+      t = usereal ? e->wll : e->tim;
       if (printed++) fprintf (rscriptfile, ",");
       else fprintf (rscriptfile, "c(");
       fprintf (rscriptfile, "%.2f", t);
     }
     fprintf (rscriptfile, ")\n");
-    fprintf (rscriptfile,
-      "z%d = sort (z%d[z%d < %.2f])\n",
-      c, c, c, usereal ? z->rlim : z->tlim);
+    fprintf (rscriptfile, "z%d = sort (z%d)\n", c, c);
     if (c == 1) {
       if (title) fprintf (rscriptfile, "par (mar=c(2.5,2.5,1.5,.5))\n");
       else fprintf (rscriptfile, "par (mar=c(2.5,2.5,.5,.5))\n");
@@ -1858,13 +1855,9 @@ static void printcactus () {
   }
   if (nzummaries) {
     z = zummaries[0];
-#if 1
     fprintf (rscriptfile,
       "legend (x=0,y=%.0f-100,legend=c(",
       usereal ? z->rlim : z->tlim);
-#else
-    fprintf (rscriptfile, "legend (x=\"topleft\",c(");
-#endif
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
