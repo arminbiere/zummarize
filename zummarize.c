@@ -1814,26 +1814,26 @@ static void printcactus () {
   if (!(rscriptfile = fopen (rscriptpath, "w")))
     die ("can not open '%s' for writing", rscriptpath);
   c = 0;
-  fprintf (rscriptfile, "pdf (\"%s\")\n", pdfpath);
+  fprintf (rscriptfile, "pdf (\"%s\",width=10)\n", pdfpath);
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
+    int printed;
     Entry * e;
     if (satonly && !z->sat) continue;
     if (unsatonly && !z->uns) continue;
     if (deeponly && !z->deep) continue;
     c++;
     fprintf (rscriptfile, "z%d=", c);
+    printed = 0;
     for (e = z->first; e; e = e->next) {
       double t;
-      if (e == z->first) fprintf (rscriptfile, "c(");
-      else fprintf (rscriptfile, ",");
-      if (usereal) {
-	if (e->res != 10 && e->res != 20) t = z->rlim;
-	else t = e->wll, assert (t < z->rlim);
-      } else {
-	if (e->res != 10 && e->res != 20) t = z->tlim;
-	else t = e->tim, assert (t < z->tlim);
-      }
+      if (e->res != 10 && e->res != 20) continue;
+      if (unsatonly && e->res != 20) continue;
+      if (satonly && e->res != 10) continue;
+      if (usereal) t = e->wll, assert (t < z->rlim);
+      else t = e->tim, assert (t < z->tlim);
+      if (printed++) fprintf (rscriptfile, ",");
+      else fprintf (rscriptfile, "c(");
       fprintf (rscriptfile, "%.2f", t);
     }
     fprintf (rscriptfile, ")\n");
@@ -1841,12 +1841,15 @@ static void printcactus () {
       "z%d = sort (z%d[z%d < %.2f])\n",
       c, c, c, usereal ? z->rlim : z->tlim);
     if (c == 1) {
+      fprintf (rscriptfile, "par(mar=c(2.5,2.5,.5,.5))\n");
       fprintf (rscriptfile,
         "plot (c(0,%d+10),c(0,%.2f+100),col=0,xlab=\"\",ylab=\"\",main=\"\")\n",
 	z->sol, usereal ? z->rlim : z->tlim);
-      fprintf (rscriptfile, "abline (%.0f, 0)\n", usereal ? z->rlim : z->tlim);
+      fprintf (rscriptfile,
+        "abline (%.0f, 0,lty=3)\n",
+	usereal ? z->rlim : z->tlim);
     }
-    fprintf (rscriptfile, "points (z%d,col=%d,pch=%d)\n", c, c, c);
+    fprintf (rscriptfile, "points (z%d,col=%d,pch=%d,type=\"o\")\n", c, c, c);
   }
   c = 0;
   fprintf (rscriptfile, "legend (x=\"topleft\",c(");
