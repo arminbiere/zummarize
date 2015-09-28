@@ -1877,11 +1877,13 @@ static void printcactus () {
   fclose (rscriptfile);
   sprintf (cmd, "Rscript %s\n", rscriptpath);
   printf ("%s\n", cmd);
-  system (cmd);
-  sprintf (cmd, "acroread %s\n", pdfpath);
-  printf ("%s\n", cmd);
-  system (cmd);
   fflush (stdout);
+  system (cmd);
+  if (!outputpath) {
+    sprintf (cmd, "acroread %s\n", pdfpath);
+    printf ("%s\n", cmd);
+    system (cmd);
+  }
 }
 
 static void zummarizeall () {
@@ -1943,9 +1945,10 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--cactus") ||
              !strcmp (argv[i], "-c")) cactus = 1;
-    else if (!strcmp (argv[i], "-t")) {
+    else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
-      outputpath = argv[i];
+      if (i + 1 == argc) die ("argument to '-o' missing");
+      outputpath = argv[++i];
     } else if (!strcmp (argv[i], "--title") ||
              !strcmp (argv[i], "-t")) {
       if (title) die ("title multiply defined");
