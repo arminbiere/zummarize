@@ -194,7 +194,9 @@ static const char * USAGE =
 "\n"
 "The directory arguments are considered to have '.err' files generated\n"
 "by the 'runlim' tool and '.log' files which adhere loosly to the output\n"
-"file requirements used in the SAT, SMT and HWMCC competitions.\n"
+"file requirements used in the SAT, SMT and HWMCC competitions.  The tool\n"
+"will by default write '<dir>/zummary' file unless there are already such\n"
+"zummaries available, which will then be used for caching results.\n"
 ;
 
 static void usage () {
