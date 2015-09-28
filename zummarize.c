@@ -41,7 +41,7 @@ typedef struct Zummary {
 } Zummary;
 
 static int verbose, force, printall, nowrite, nobounds;
-static int satonly, unsatonly, deeponly;
+static int satonly, unsatonly, deeponly, cactus;
 static int cap = 1000;
 
 static Zummary ** zummaries;
@@ -185,10 +185,13 @@ static const char * USAGE =
 " -h             print this command line option zummary\n"
 " -v             increase verbose level (maximum 3, default 0)\n"
 " -f             recompute zummaries (do not read '<dir>/zummary' files)\n"
+"\n"
 " -a|--all       report all column and rows (even with zero entries)\n"
 " -s|--sat       report goes over satisfiable instances only\n"
 " -u|--unsat     report goes over unsatisfiable instances only\n"
 " -d|--deep      report goes over unsolved instances only (sorted by deep)\n"
+" -c|-cactus     generate cactus\n"
+"\n"
 " --no-write     do not write generated zummaries\n"
 " --no-bounds    do not print bounds\n"
 "\n"
@@ -1631,6 +1634,23 @@ static int dlen (double d) {
   return res;
 }
 
+static int skiprefixlength () {
+  int res, i, j;
+  if (nzummaries) {
+    res = strlen (zummaries[0]->path);
+    for (i = 1; i < nzummaries; i++) {
+      for (j = 0; j < res; j++)
+	if (zummaries[i]->path[j] != zummaries[0]->path[j])
+	  break;
+      res = j;
+      assert (res <= strlen (zummaries[i]->path));
+    }
+    while (res > 0 && zummaries[0]->path[res-1] != '/')
+      res--;
+  } else res = 0;
+  return res;
+}
+
 static void printzummaries () {
   int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk;
   int wll, tim, mem, max, bst, unq, deep;
@@ -1639,18 +1659,7 @@ static void printzummaries () {
   nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = 0;
   wll = tim = mem = max = bst = unq = deep = 0;
 
-  if (nzummaries) {
-    skip = strlen (zummaries[0]->path);
-    for (i = 1; i < nzummaries; i++) {
-      for (j = 0; j < skip; j++)
-	if (zummaries[i]->path[j] != zummaries[0]->path[j])
-	  break;
-      skip = j;
-      assert (skip <= strlen (zummaries[i]->path));
-    }
-    while (skip > 0 && zummaries[0]->path[skip-1] != '/')
-      skip--;
-  } else skip = 0;
+  skip = skiprefixlength ();
 
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
@@ -1791,6 +1800,80 @@ static void printdeep () {
   pclose (file);
 }
 
+static void printcactus () {
+  char prefix[80], rscriptpath[100], pdfpath[100], cmd[200];
+  int i, c, skip = skiprefixlength ();
+  FILE * rscriptfile;
+#if 0
+  sprintf (prefix, "/tmp/zummarize-print-cactus-%d", getpid ());
+#else
+  sprintf (prefix, "/tmp/zummarize-print-cactus-nopidyet");
+#endif
+  sprintf (rscriptpath, "%s.rscript", prefix);
+  sprintf (pdfpath, "%s.pdf", prefix);
+  if (!(rscriptfile = fopen (rscriptpath, "w")))
+    die ("can not open '%s' for writing", rscriptpath);
+  c = 0;
+  fprintf (rscriptfile, "pdf (\"%s\")\n", pdfpath);
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    Entry * e;
+    if (satonly && !z->sat) continue;
+    if (unsatonly && !z->uns) continue;
+    if (deeponly && !z->deep) continue;
+    c++;
+    fprintf (rscriptfile, "z%d=", c);
+    for (e = z->first; e; e = e->next) {
+      double t;
+      if (e == z->first) fprintf (rscriptfile, "c(");
+      else fprintf (rscriptfile, ",");
+      if (usereal) {
+	if (e->res != 10 && e->res != 20) t = z->rlim;
+	else t = e->wll, assert (t < z->rlim);
+      } else {
+	if (e->res != 10 && e->res != 20) t = z->tlim;
+	else t = e->tim, assert (t < z->tlim);
+      }
+      fprintf (rscriptfile, "%.2f", t);
+    }
+    fprintf (rscriptfile, ")\n");
+    fprintf (rscriptfile,
+      "z%d = sort (z%d[z%d < %.2f])\n",
+      c, c, c, usereal ? z->rlim : z->tlim);
+    if (c == 1) {
+      fprintf (rscriptfile,
+        "plot (c(0,%d+10),c(0,%.2f+100),col=0,xlab=\"\",ylab=\"\",main=\"\")\n",
+	z->sol, usereal ? z->rlim : z->tlim);
+      fprintf (rscriptfile, "abline (%.0f, 0)\n", usereal ? z->rlim : z->tlim);
+    }
+    fprintf (rscriptfile, "points (z%d,col=%d,pch=%d)\n", c, c, c);
+  }
+  c = 0;
+  fprintf (rscriptfile, "legend (x=\"topleft\",c(");
+  for (i = 0; i < nzummaries; i++) {
+    Zummary * z = zummaries[i];
+    if (satonly && !z->sat) continue;
+    if (unsatonly && !z->uns) continue;
+    if (deeponly && !z->deep) continue;
+    c++;
+    if (c > 1) fputc (',', rscriptfile);
+    fprintf (rscriptfile, "\"%s\"", z->path + skip);
+  }
+  fprintf (rscriptfile, "),col=1:%d,pch=1:%d)\n", c, c);
+  fprintf (rscriptfile, "dev.off ()\n");
+  fclose (rscriptfile);
+  sprintf (cmd, "Rscript %s\n", rscriptpath);
+  printf ("%s\n", cmd);
+  system (cmd);
+  sprintf (cmd, "acroread %s\n", pdfpath);
+  printf ("%s\n", cmd);
+  system (cmd);
+  fflush (stdout);
+#if 0
+  unlink (rscriptpath);
+#endif
+}
+
 static void zummarizeall () {
   msg (2,
     "%u benchmarks (%llu searched, %llu collisions %.2f on average)",
@@ -1804,8 +1887,11 @@ static void zummarizeall () {
   fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
   computedeep ();
   sortzummaries ();
-  printzummaries ();
-  if (deeponly) printdeep ();
+  if (cactus) printcactus ();
+  else {
+    printzummaries ();
+    if (deeponly) printdeep ();
+  }
 }
 
 static void reset () {
@@ -1845,6 +1931,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-u")) unsatonly = 1;
     else if (!strcmp (argv[i], "--deep") ||
              !strcmp (argv[i], "-d")) deeponly = 1;
+    else if (!strcmp (argv[i], "--cactus") ||
+             !strcmp (argv[i], "-c")) cactus = 1;
     else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (argv[i][0] == '-')
