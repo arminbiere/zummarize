@@ -412,7 +412,6 @@ static void insertorder (const char * name) {
   o = order + norder++;
   o->name = strdup (name);
   o->order = norder;
-  printf ("%s\n", o->name);
 }
 
 static void parseorder () {
