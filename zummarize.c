@@ -40,6 +40,11 @@ typedef struct Zummary {
   char ubndbroken;
 } Zummary;
 
+typedef struct Order {
+  char * name;
+  int order;
+} Order;
+
 static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
@@ -59,6 +64,10 @@ static int ntokens, sizetokens;
 static Symbol ** symtab;
 static unsigned nsyms, sizesymtab;
 static unsigned long long searches, collisions;
+
+static const char * orderpath;
+static Order * order;
+static int norder;
 
 static int usereal;
 
@@ -196,6 +205,8 @@ static const char * USAGE =
 "-o <output>\n"
 "-t <title>\n"
 "--title <title>\n"
+"\n"
+"--order <orderpath>\n"
 "\n"
 "--no-write     do not write generated zummaries\n"
 "--no-bounds    do not print bounds\n"
@@ -376,6 +387,40 @@ static int parsezummaryline () {
       msg (3, "token[%d,%d] %s", lineno, i, tokens[i]);
   if (newline) lineno++;
   return ntokens;
+}
+
+static int parseorderline () {
+  ntoken = 0;
+  for (;;) {
+    int ch = nextch ();
+    if (ch == EOF) return 0;
+    if (ch == '\n') break;
+    pushtoken (ch);
+  }
+  pushtoken (0);
+  return 1;
+}
+
+static void insertorder (const char * name) {
+  Order * o;
+  int i;
+  for (i = 0; i < norder; i++)
+    if (!strcmp (name, order[i].name))
+      return;
+  order = realloc (order, (norder + 1) * sizeof *order);
+  o = order + norder++;
+  o->name = strdup (name);
+  o->order = norder;
+  printf ("%s\n", o->name);
+}
+
+static void parseorder () {
+  assert (cactus);
+  assert (orderpath);
+  open_input (orderpath);
+  while (parseorderline ())
+    insertorder (token);
+  close_input (orderpath);
 }
 
 static int getmtime (const char * path, double * timeptr) {
@@ -1820,8 +1865,29 @@ static void printcactus () {
   }
   if (!(rscriptfile = fopen (rscriptpath, "w")))
     die ("can not open '%s' for writing", rscriptpath);
+  if (orderpath) parseorder ();
+  fprintf (rscriptfile, "m = c(");
   c = 0;
+  for (i = 0; i < nzummaries; i++) {
+    z = zummaries[i];
+    if (satonly && !z->sat) continue;
+    if (unsatonly && !z->uns) continue;
+    if (deeponly && !z->deep) continue;
+    if (c++) fputc (',', rscriptfile);
+    if (norder) {
+      int j;
+      for (j = 0; j < norder; j++)
+	if (!strcmp (z->path + skip, order[j].name))
+	  break;
+      if (j == norder)
+	die ("order file '%s' does not contain '%s'",
+	  orderpath, z->path + skip);
+      fprintf (rscriptfile, "%d", order[j].order);
+    } else fprintf (rscriptfile, "%d", c);
+  }
+  fprintf (rscriptfile, ")\n");
   fprintf (rscriptfile, "pdf (\"%s\",height=5,width=8)\n", pdfpath);
+  c = 0;
   for (i = 0; i < nzummaries; i++) {
     z = zummaries[i];
     int printed;
@@ -1856,13 +1922,17 @@ static void printcactus () {
         "abline (%.0f, 0,lty=3)\n",
 	usereal ? z->rlim : z->tlim);
     }
-    fprintf (rscriptfile, "points (z%d,col=%d,pch=%d,type=\"o\")\n", c, c, c);
+    fprintf (rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c, c, c);
   }
   if (nzummaries) {
     z = zummaries[0];
-    fprintf (rscriptfile,
+#if 0
       "legend (x=0,y=%.0f-100,legend=c(",
       usereal ? z->rlim : z->tlim);
+#else
+    fprintf (rscriptfile,
+      "legend (x=\"left\",legend=c(");
+#endif
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
@@ -1874,7 +1944,7 @@ static void printcactus () {
     if (c > 1) fputc (',', rscriptfile);
     fprintf (rscriptfile, "\"%s\"", z->path + skip);
   }
-  fprintf (rscriptfile, "),col=1:%d,pch=1:%d)\n", c, c);
+  fprintf (rscriptfile, "),col=m,pch=m,cex=0.8)\n");
   fprintf (rscriptfile, "dev.off ()\n");
   fclose (rscriptfile);
   sprintf (cmd, "Rscript %s\n", rscriptpath);
@@ -1929,6 +1999,9 @@ static void reset () {
     free (s);
   }
   free (symtab);
+  for (i = 0; i < norder; i++)
+    free (order[i].name);
+  free (order);
 }
 
 int main (int argc, char ** argv) {
@@ -1956,6 +2029,10 @@ int main (int argc, char ** argv) {
       if (title) die ("title multiply defined");
       if (i + 1 == argc) die ("argument to '%s' missing", argv[i]);
       title = argv[++i];
+    } else if (!strcmp (argv[i], "--order")) {
+      if (orderpath) die ("multiple '--order' options");
+      if (i + 1 == argc) die ("argument to '%s' missing", argv[i]);
+      orderpath = argv[++i];
     } else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
     else if (argv[i][0] == '-')
@@ -1967,15 +2044,22 @@ int main (int argc, char ** argv) {
   if (!count) die ("no directory specified (try '-h')");
   if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
   if (title && !cactus) die ("title defined without cactus");
+  if (outputpath && !cactus) die ("output file specfied without cactus");
   if (nowrite) msg (1, "will not write zummaries");
   else msg (1, "will generate or update existing zummaries");
   if (nobounds) msg (1, "will not write bounds");
   else msg (1, "will write bounds if found");
   if (satonly) msg (1, "will restrict report to satisfiable instances");
   if (unsatonly) msg (1, "will restrict report to unsatisfiable instances");
-  for (i = 1; i < argc; i++)
-    if (argv[i][0] != '-' && isdir (argv[i]))
+  if (orderpath) parseorder ();
+  for (i = 1; i < argc; i++) {
+    if (!strcmp (argv[i], "-t") ||
+        !strcmp (argv[i], "-o") ||
+        !strcmp (argv[i], "--title") ||
+        !strcmp (argv[i], "--order")) i++;
+    else if (argv[i][0] != '-' && isdir (argv[i]))
       zummarizeone (argv[i]);
+  }
   zummarizeall ();
   reset ();
   msg (1, "%d loaded, %d updated, %d written", loaded, updated, written);
