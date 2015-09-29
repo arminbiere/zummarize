@@ -48,7 +48,6 @@ typedef struct Order {
 static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
-static int cap = 1000;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -70,6 +69,9 @@ static Order * order;
 static int norder;
 
 static int usereal;
+
+static int capped = 1000;
+static int logy;
 
 static void die (const char * fmt, ...) {
   va_list ap;
@@ -202,11 +204,10 @@ static const char * USAGE =
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
 "-c|--cactus    generate cactus\n"
 "\n"
-"-o <output>\n"
-"-t <title>\n"
-"--title <title>\n"
-"\n"
-"--order <orderpath>\n"
+"  -l|--log\n"
+"  -o <output>\n"
+"  -t <title>|--title <title>\n"
+"  --order <orderpath>\n"
 "\n"
 "--no-write     do not write generated zummaries\n"
 "--no-bounds    do not print bounds\n"
@@ -1528,21 +1529,21 @@ static void computedeep () {
   } else msg (1, "all instances solved");
   for (i = 0; i < nzummaries; i++) {
     Zummary * z = zummaries[i];
-    int capped;
+    int aftercapping;
     Entry * e;
     if (z->ubndbroken) continue;
     z->deep = 0;
     for (e = z->first; e; e = e->next) {
       double inc;
       if (e->dis) continue;
-      if ((capped = e->bnd) < 0) continue;
+      if ((aftercapping = e->bnd) < 0) continue;
       if (e->symbol->sat) continue;
       if (e->symbol->uns) continue;
-      if (capped > cap) capped = cap;
-      inc = 1e4 - 1e4 / (capped + 2.0);
+      if (aftercapping > capped) aftercapping = capped;
+      inc = ((double)capped) - ((double)capped) / (aftercapping + 2.0);
       z->deep += inc;
       msg (2, "unsat-bound %d capped to %d in '%s/%s' contributes %.0f",
-        e->bnd, capped, z->path, e->name, inc);
+        e->bnd, aftercapping, z->path, e->name, inc);
     }
     if (unsolved > 0) z->deep /= (double) unsolved;
     msg (1, "deep score %.0f of '%s'", z->deep, z->path);
@@ -1852,7 +1853,7 @@ static void printdeep () {
 
 static void printcactus () {
   char prefix[80], rscriptpath[100], pdfpathbuf[100], cmd[200];
-  int i, c, skip = skiprefixlength ();
+  int i, c, skip = skiprefixlength (), maxbnd;
   const char * pdfpath;
   FILE * rscriptfile;
   Zummary * z;
@@ -1868,6 +1869,7 @@ static void printcactus () {
   if (orderpath) parseorder ();
   fprintf (rscriptfile, "m = c(");
   c = 0;
+  maxbnd = 0;
   for (i = 0; i < nzummaries; i++) {
     z = zummaries[i];
     if (satonly && !z->sat) continue;
@@ -1884,6 +1886,7 @@ static void printcactus () {
 	  orderpath, z->path + skip);
       fprintf (rscriptfile, "%d", order[j].order);
     } else fprintf (rscriptfile, "%d", c);
+    if (z->bnd > maxbnd) maxbnd = z->bnd;
   }
   fprintf (rscriptfile, ")\n");
   fprintf (rscriptfile, "pdf (\"%s\",height=5,width=8)\n", pdfpath);
@@ -1903,7 +1906,11 @@ static void printcactus () {
       if (!deeponly && e->res != 10 && e->res != 20) continue;
       if (unsatonly && e->res != 20) continue;
       if (satonly && e->res != 10) continue;
-      if (deeponly && e->bnd < 0) continue;
+      if (deeponly) {
+        if (e->bnd < 0) continue;
+	if (e->best && e->best->res == 10) continue;
+	if (e->best && e->best->res == 20) continue;
+      }
       t = usereal ? e->wll : e->tim;
       if (printed++) fprintf (rscriptfile, ",");
       else fprintf (rscriptfile, "c(");
@@ -1915,12 +1922,26 @@ static void printcactus () {
     if (c == 1) {
       if (title) fprintf (rscriptfile, "par (mar=c(2.5,2.5,1.5,.5))\n");
       else fprintf (rscriptfile, "par (mar=c(2.5,2.5,.5,.5))\n");
-      fprintf (rscriptfile,
-        "plot (c(0,%d+10),c(0,%.2f+100),col=0,xlab=\"\",ylab=\"\",main=\"%s\")\n",
-	z->sol, usereal ? z->rlim : z->tlim, title ? title : "");
-      fprintf (rscriptfile,
-        "abline (%.0f, 0,lty=3)\n",
-	usereal ? z->rlim : z->tlim);
+
+      if (deeponly) {
+	fprintf (rscriptfile,
+	  "plot (c(0,%d+10),c(0,%d+100),"
+	  "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+	  maxbnd, capped, title ? title : "",
+	  logy ? ",log=\"y\"" : "");
+	fprintf (rscriptfile,
+	  "abline (%d, 0,lty=3)\n",
+	  capped);
+      } else {
+	fprintf (rscriptfile,
+	  "plot (c(0,%d+10),c(0,%.2f+100),"
+	  "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+	  z->sol, usereal ? z->rlim : z->tlim, title ? title : "",
+	  logy ? ",log=\"y\"" : "");
+	fprintf (rscriptfile,
+	  "abline (%.0f, 0,lty=3)\n",
+	  usereal ? z->rlim : z->tlim);
+      }
     }
     fprintf (rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c, c, c);
   }
@@ -2020,6 +2041,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--cactus") ||
              !strcmp (argv[i], "-c")) cactus = 1;
+    else if (!strcmp (argv[i], "--log") ||
+             !strcmp (argv[i], "-l")) logy = 1;
     else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
       if (i + 1 == argc) die ("argument to '-o' missing");
