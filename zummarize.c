@@ -411,7 +411,10 @@ static void insertorder (const char * name) {
   order = realloc (order, (norder + 1) * sizeof *order);
   o = order + norder++;
   o->name = strdup (name);
-  o->order = norder;
+  if (norder > 1) {
+    o->order = (o-1)->order + 1;
+    if (o->order == 7 || o->order == 15) o->order++;
+  } else o->order = 1;
 }
 
 static void parseorder () {
