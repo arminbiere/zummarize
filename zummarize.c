@@ -1539,7 +1539,7 @@ static void computedeep () {
       if (e->symbol->sat) continue;
       if (e->symbol->uns) continue;
       if (aftercapping > capped) aftercapping = capped;
-      inc = ((double)capped) - ((double)capped) / (aftercapping + 2.0);
+      inc = 1e4 - 1e4 / (aftercapping + 2.0);
       z->deep += inc;
       msg (2, "unsat-bound %d capped to %d in '%s/%s' contributes %.0f",
         e->bnd, aftercapping, z->path, e->name, inc);
