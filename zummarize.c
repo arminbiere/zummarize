@@ -1946,13 +1946,8 @@ static void printcactus () {
   }
   if (nzummaries) {
     z = zummaries[0];
-#if 0
-      "legend (x=0,y=%.0f-100,legend=c(",
-      usereal ? z->rlim : z->tlim);
-#else
     fprintf (rscriptfile,
       "legend (x=\"left\",legend=c(");
-#endif
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
