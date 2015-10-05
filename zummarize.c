@@ -72,6 +72,7 @@ static int usereal;
 
 static int capped = 1000;
 static int logy;
+static int merge;
 
 static void die (const char * fmt, ...) {
   va_list ap;
@@ -203,6 +204,7 @@ static const char * USAGE =
 "-u|--unsat     report goes over unsatisfiable instances only\n"
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
 "-c|--cactus    generate cactus\n"
+"-m|--merge     merge zummaries by benchmark\n"
 "\n"
 "  -l|--log\n"
 "  -o <output>\n"
@@ -1258,13 +1260,13 @@ static void loadzummary (Zummary * z, const char * path) {
 	  e->name, e->res, e->tim, e->wll, e->mem, tlim, rlim, slim);
 
       if (e->res != 10 && e->res != 20) {
+	 assert (e->res != 4);
 	     if (e->res == 1) e->tio = 1;
 	     if (e->res == 2) e->meo = 1;
 	else if (e->res == 3) e->unk = 1;
-	else if (e->res == 4) e->dis = 1;
+	else if (e->res == 4) e->dis = 1;  // TODO remove?
 	else if (e->res == 5) e->s11 = 1;
 	else if (e->res == 6) e->si6 = 1;
-	e->res = 0;
       }
 
     } else if (ntokens < 7 ||
@@ -1976,6 +1978,34 @@ static void printcactus () {
   }
 }
 
+static void printmerged () {
+  int skip = skiprefixlength (), i;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    Entry * e;
+    printf ("%s", s->name);
+    for (e = s->first; e; e = e->chain) {
+      printf (";%s", e->zummary->path + skip);
+      assert (e->res != 4);
+      switch (e->res) {
+	case  1:  printf (";time"); break;
+	case  2:  printf (";mem"); break;
+	case  5:  printf (";s11"); break;
+	case  6:  printf (";s6"); break;
+	case 10:  printf (";sat"); break;
+	case 20:  printf (";uns"); break;
+	default:  assert (e->res == 3);
+        case 3:   printf (";unk"); break;
+      }
+      printf (";%d", e->bnd);
+      printf (";%.02f", e->wll);
+      printf (";%.02f", e->tim);
+      printf (";%.1f", e->mem);
+    }
+    printf ("\n");
+  }
+}
+
 static void zummarizeall () {
   msg (2,
     "%u benchmarks (%llu searched, %llu collisions %.2f on average)",
@@ -1984,16 +2014,18 @@ static void zummarizeall () {
   sortsymbols ();
   discrepancies ();
   checklimits ();
-  fixzummaries (GLOBAL_ZUMMARY_DO_NOT_HAVE_BEST);
-  findbest ();
-  fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
-  computedeep ();
-  sortzummaries ();
-  if (cactus) printcactus ();
-  else {
-    printzummaries ();
-    if (deeponly) printdeep ();
-  }
+  if (!merge) {
+    fixzummaries (GLOBAL_ZUMMARY_DO_NOT_HAVE_BEST);
+    findbest ();
+    fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
+    computedeep ();
+    sortzummaries ();
+    if (cactus) printcactus ();
+    else {
+      printzummaries ();
+      if (deeponly) printdeep ();
+    }
+  } else printmerged ();
 }
 
 static void reset () {
@@ -2040,6 +2072,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-c")) cactus = 1;
     else if (!strcmp (argv[i], "--log") ||
              !strcmp (argv[i], "-l")) logy = 1;
+    else if (!strcmp (argv[i], "--merge") ||
+             !strcmp (argv[i], "-m")) merge = 1;
     else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
       if (i + 1 == argc) die ("argument to '-o' missing");
@@ -2065,6 +2099,7 @@ int main (int argc, char ** argv) {
   if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
   if (title && !cactus) die ("title defined without cactus");
   if (outputpath && !cactus) die ("output file specfied without cactus");
+  if (cactus && merge) die ("can not print cactus and merged data");
   if (nowrite) msg (1, "will not write zummaries");
   else msg (1, "will generate or update existing zummaries");
   if (nobounds) msg (1, "will not write bounds");
