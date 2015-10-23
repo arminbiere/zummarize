@@ -1983,6 +1983,18 @@ static void printmerged () {
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
     Entry * e;
+    if (!i) {
+      printf ("benchmark");
+      for (e = s->first; e; e = e->chain) {
+	printf (";modelchecker");
+	printf (";status");
+	printf (";bound");
+	printf (";real");
+	printf (";time");
+	printf (";mem");
+      }
+      printf ("\n");
+    }
     printf ("%s", s->name);
     for (e = s->first; e; e = e->chain) {
       printf (";%s", e->zummary->path + skip);
