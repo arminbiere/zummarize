@@ -1986,7 +1986,7 @@ static void printmerged () {
     if (!i) {
       printf ("benchmark");
       for (e = s->first; e; e = e->chain) {
-	printf (";modelchecker");
+	printf (";solver");
 	printf (";status");
 	printf (";bound");
 	printf (";real");
