@@ -73,6 +73,7 @@ static int usereal;
 static int capped = 1000;
 static int logy;
 static int merge;
+static int rank;
 
 static void die (const char * fmt, ...) {
   va_list ap;
@@ -2018,6 +2019,14 @@ static void printmerged () {
   }
 }
 
+static void printranked () {
+  int i;
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    printf ("%d %s\n", s->sat + s->uns, s->name);
+  }
+}
+
 static void zummarizeall () {
   msg (2,
     "%u benchmarks (%llu searched, %llu collisions %.2f on average)",
@@ -2032,7 +2041,8 @@ static void zummarizeall () {
     fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
     computedeep ();
     sortzummaries ();
-    if (cactus) printcactus ();
+    if (rank) printranked ();
+    else if (cactus) printcactus ();
     else {
       printzummaries ();
       if (deeponly) printdeep ();
@@ -2086,6 +2096,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-l")) logy = 1;
     else if (!strcmp (argv[i], "--merge") ||
              !strcmp (argv[i], "-m")) merge = 1;
+    else if (!strcmp (argv[i], "--rank") ||
+             !strcmp (argv[i], "-r")) rank = 1;
     else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
       if (i + 1 == argc) die ("argument to '-o' missing");
