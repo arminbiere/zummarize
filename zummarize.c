@@ -73,6 +73,7 @@ static int usereal;
 static int capped = 1000;
 static int logy;
 static int merge;
+static int force;
 static int rank;
 
 static void die (const char * fmt, ...) {
@@ -206,6 +207,7 @@ static const char * USAGE =
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
 "-c|--cactus    generate cactus\n"
 "-m|--merge     merge zummaries by benchmark\n"
+"-r|--rank      print number of times benchmark has been solved\n"
 "\n"
 "  -l|--log\n"
 "  -o <output>\n"
@@ -1240,14 +1242,14 @@ static void loadzummary (Zummary * z, const char * path) {
 	msg (1, "setting real time limit of '%s' to %.0f", z->path, rlim);
 	z->rlim = rlim;
       } else if (z->rlim != rlim)
-        die ("different space limit %.0f in '%s'", rlim, path);
+        die ("different real time limit %.0f in '%s'", rlim, path);
       slim = atof (tokens[7]);
       if (slim <= 0)
 	die ("invalid space limit %.0f in '%s'", slim, path);
       if (z->slim < 0) {
 	msg (1, "setting space limit of '%s' to %.0f", z->path, slim);
 	z->slim = slim;
-      } else if (z->slim != slim)
+      } else if (!force && z->slim != slim)
         die ("different space limit %.0f in '%s'", slim, path);
       if (ntokens < 9 || (e->bnd = atof (tokens[8])) < 0)
 	e->bnd = -1;
@@ -1345,7 +1347,7 @@ static void updatezummary (Zummary * z) {
 	die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
       if (z->rlim != zummaries[0]->rlim)
 	die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
-      if (z->slim != zummaries[0]->slim)
+      if (!force && z->slim != zummaries[0]->slim)
 	die ("different space limit '%.0f' in '%s'", z->slim, z->path);
     }
   }
@@ -1499,7 +1501,7 @@ static void checklimits () {
       die ("different time limit in '%s' and '%s'", y->path, z->path);
     if (y->rlim != z->rlim)
       die ("different real time limit in '%s' and '%s'", y->path, z->path);
-    if (y->slim != z->slim)
+    if (!force && y->slim != z->slim)
       die ("different space limit in '%s' and '%s'", y->path, z->path);
   }
   msg (1, "all zummaries have the same time and space limits");
@@ -2098,6 +2100,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-m")) merge = 1;
     else if (!strcmp (argv[i], "--rank") ||
              !strcmp (argv[i], "-r")) rank = 1;
+    else if (!strcmp (argv[i], "--force") ||
+             !strcmp (argv[i], "-f")) force = 1;
     else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
       if (i + 1 == argc) die ("argument to '-o' missing");
