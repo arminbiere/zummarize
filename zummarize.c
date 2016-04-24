@@ -1975,7 +1975,7 @@ static void printcactus () {
   fflush (stdout);
   system (cmd);
   if (!outputpath) {
-    sprintf (cmd, "acroread %s\n", pdfpath);
+    sprintf (cmd, "evince %s\n", pdfpath);
     printf ("%s\n", cmd);
     system (cmd);
   }
