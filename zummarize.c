@@ -48,6 +48,7 @@ typedef struct Order {
 static int verbose, force, printall, nowrite, nobounds;
 static int satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
+static int solved, unsolved;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -208,6 +209,8 @@ static const char * USAGE =
 "-c|--cactus    generate cactus\n"
 "-m|--merge     merge zummaries by benchmark\n"
 "-r|--rank      print number of times benchmark has been solved\n"
+"--unsolved     print unsolved (never solved) instances\n"
+"--solved       print all at least once solved instances\n"
 "\n"
 "  -l|--log\n"
 "  -o <output>\n"
@@ -1860,7 +1863,7 @@ static void printdeep () {
 
 static void printcactus () {
   char prefix[80], rscriptpath[100], pdfpathbuf[100], cmd[200];
-  int i, c, skip = skiprefixlength (), maxbnd;
+  int i, c, skip = skiprefixlength (), maxbnd, res;
   const char * pdfpath;
   FILE * rscriptfile;
   Zummary * z;
@@ -1973,11 +1976,13 @@ static void printcactus () {
   sprintf (cmd, "Rscript %s\n", rscriptpath);
   printf ("%s\n", cmd);
   fflush (stdout);
-  system (cmd);
+  res = system (cmd);
+  if (res) wrn ("'system (%s) returned '%d'", cmd, res);
   if (!outputpath) {
     sprintf (cmd, "evince %s\n", pdfpath);
     printf ("%s\n", cmd);
-    system (cmd);
+    res = system (cmd);
+    if (res) wrn ("'system (%s) returned '%d'", cmd, res);
   }
 }
 
@@ -2025,6 +2030,9 @@ static void printranked () {
   int i;
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
+    int c = s->sat + s->uns;
+    if (solved && !c) continue;
+    if (unsolved && c) continue;
     printf ("%d %s\n", s->sat + s->uns, s->name);
   }
 }
@@ -2037,19 +2045,20 @@ static void zummarizeall () {
   sortsymbols ();
   discrepancies ();
   checklimits ();
-  if (!merge) {
+  if (merge) printmerged ();
+  else {
     fixzummaries (GLOBAL_ZUMMARY_DO_NOT_HAVE_BEST);
     findbest ();
     fixzummaries (GLOBAL_ZUMMARY_HAVE_BEST);
     computedeep ();
     sortzummaries ();
-    if (rank) printranked ();
+    if (solved || unsolved || rank) printranked ();
     else if (cactus) printcactus ();
     else {
       printzummaries ();
       if (deeponly) printdeep ();
     }
-  } else printmerged ();
+  }
 }
 
 static void reset () {
@@ -2102,7 +2111,17 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-r")) rank = 1;
     else if (!strcmp (argv[i], "--force") ||
              !strcmp (argv[i], "-f")) force = 1;
-    else if (!strcmp (argv[i], "-o")) {
+    else if (!strcmp (argv[i], "--solved")) {
+      if (solved) die ("'--solved' specified twice");
+      if (unsolved)
+	die ("can not combine '--unsolved' and '--solved'");
+      solved = 1;
+    } else if (!strcmp (argv[i], "--unsolved")) {
+      if (unsolved) die ("'--unsolved' specified twice");
+      if (solved)
+	die ("can not combine '--solved' and '--unsolved'");
+      unsolved = 1;
+    } else if (!strcmp (argv[i], "-o")) {
       if (outputpath) die ("multiple output paths specified");
       if (i + 1 == argc) die ("argument to '-o' missing");
       outputpath = argv[++i];
