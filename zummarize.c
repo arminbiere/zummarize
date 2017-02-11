@@ -1935,9 +1935,9 @@ static void printcactus () {
 
       if (deeponly) {
 	fprintf (rscriptfile,
-	  "plot (c(0,%d+10),c(0,%d+100),"
+	  "plot (c(0,%d+10),c(0,%d+%d),"
 	  "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-	  maxbnd, capped, title ? title : "",
+	  maxbnd, capped, (int)(capped*0.02), title ? title : "",
 	  logy ? ",log=\"y\"" : "");
 	fprintf (rscriptfile,
 	  "abline (%d, 0,lty=3)\n",
