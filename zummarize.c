@@ -1944,9 +1944,12 @@ static void printcactus () {
 	  capped);
       } else {
 	fprintf (rscriptfile,
-	  "plot (c(0,%d+10),c(0,%.2f+100),"
+	  "plot (c(0,%d+10),c(0,%.2f+%.2f),"
 	  "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-	  z->sol, usereal ? z->rlim : z->tlim, title ? title : "",
+	  z->sol,
+	  (usereal ? z->rlim : z->tlim),
+	  0.02*(usereal ? z->rlim : z->tlim),
+	  title ? title : "",
 	  logy ? ",log=\"y\"" : "");
 	fprintf (rscriptfile,
 	  "abline (%.0f, 0,lty=3)\n",
