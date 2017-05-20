@@ -212,6 +212,8 @@ static const char * USAGE =
 "--unsolved     print unsolved (never solved) instances\n"
 "--solved       print all at least once solved instances\n"
 "\n"
+"--par<x>       use PAR<X> score\n"
+"\n"
 "  -l|--log\n"
 "  -o <output>\n"
 "  -t <title>|--title <title>\n"
