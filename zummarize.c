@@ -35,7 +35,7 @@ typedef struct Zummary {
   char * path;
   Entry * first, * last;
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd, bst, unq;
-  double wll, tim, mem, max, tlim, rlim, slim, deep;
+  double wll, tim, par, mem, max, tlim, rlim, slim, deep;
   int only_use_for_reporting_and_do_not_write;
   char ubndbroken;
 } Zummary;
@@ -45,7 +45,7 @@ typedef struct Order {
   int order;
 } Order;
 
-static int verbose, force, printall, nowrite, nobounds;
+static int verbose, force, printall, nowrite, nobounds, par;
 static int satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
 static int solved, unsolved;
@@ -1205,6 +1205,10 @@ static void fixzummary (Zummary * z, int zummary_mode) {
   z->sol = z->sat + z->uns;
   z->fld = z->tio + z->meo + z->s11 + z->si6 + z->unk;
   assert (z->cnt == z->sol + z->fld + z->dis);
+  if (par) {
+    if (usereal) z->par = z->wll + par * z->rlim * z->fld;
+	    else z->par = z->tim + par * z->tlim * z->fld;
+  }
   if (zummary_mode != LOCAL_ZUMMARY)
     z->only_use_for_reporting_and_do_not_write = 1;
 }
@@ -1654,8 +1658,10 @@ static void findbest () {
 
 static int cmpzummaries4qsort (const void * p, const void * q) {
   Zummary * y = * (Zummary**) p, * z = * (Zummary**) q;
+  int res;
+  if (par && (res = cmpdouble (y->par, z->par))) return res;
   int a = y->sat + y->uns, b = z->sat + z->uns;
-  int res = b - a;
+  res = b - a;
        if (satonly)   res = z->sat - y->sat;
   else if (unsatonly) res = z->uns - y->uns;
   else if (deeponly)  res = cmpdouble (z->deep, y->deep);
@@ -1713,12 +1719,16 @@ static int skiprefixlength () {
 }
 
 static void printzummaries () {
+
+  char parname[10];
+  sprintf (parname, "par%d", par);
+
   int nam, cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk;
-  int wll, tim, mem, max, bst, unq, deep;
+  int wll, tim, par, mem, max, bst, unq, deep;
   int i, j, skip;
 
   nam = cnt = sol = sat = uns = dis = fld = tio = meo = s11 = si6 = unk = 0;
-  wll = tim = mem = max = bst = unq = deep = 0;
+  wll = tim = par = mem = max = bst = unq = deep = 0;
 
   skip = skiprefixlength ();
 
@@ -1752,6 +1762,7 @@ do { \
     UPDATEIFLARGERLEN (unk, ilen, z->unk);
     UPDATEIFLARGERLEN (wll, dlen, z->wll);
     UPDATEIFLARGERLEN (tim, dlen, z->tim);
+    UPDATEIFLARGERLEN (par, dlen, z->par);
     UPDATEIFLARGERLEN (mem, dlen, z->mem);
     UPDATEIFLARGERLEN (max, dlen, z->max);
     UPDATEIFLARGERLEN (bst, ilen, z->bst);
@@ -1784,6 +1795,7 @@ do { \
   PRINTHEADER (unk, "unk");
   PRINTHEADER (wll, "real");
   PRINTHEADER (tim, "time");
+  PRINTHEADER (par, parname);
   PRINTHEADER (mem, "space");
   PRINTHEADER (max, "max");
   PRINTHEADER (bst, "best");
@@ -1830,6 +1842,7 @@ do { \
     IPRINTZUMMARY (unk);
     FPRINTZUMMARY (wll);
     FPRINTZUMMARY (tim);
+    FPRINTZUMMARY (par);
     FPRINTZUMMARY (mem);
     FPRINTZUMMARY (max);
     IPRINTZUMMARY (bst);
@@ -2139,7 +2152,14 @@ int main (int argc, char ** argv) {
       orderpath = argv[++i];
     } else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
-    else if (argv[i][0] == '-')
+    else if (argv[i][0] == '-' && argv[i][1] == '-' &&
+             argv[i][2] == 'p' && argv[i][3] == 'a' && argv[i][4] == 'r') {
+      if (!isdigit (argv[i][5]) ||
+          (argv[i][6] && !isdigit (argv[i][6])) ||
+          (argv[i][6] && argv[i][7]))
+	die ("expected one or two digits after '--par'");
+      par = atoi (argv[i] + 5);
+    } else if (argv[i][0] == '-')
       die ("invalid option '%s' (try '-h')", argv[i]);
     else if (!isdir (argv[i]))
       wrn ("argument '%s' not a directory (try '-h')", argv[i]);
@@ -2156,6 +2176,7 @@ int main (int argc, char ** argv) {
   else msg (1, "will write bounds if found");
   if (satonly) msg (1, "will restrict report to satisfiable instances");
   if (unsatonly) msg (1, "will restrict report to unsatisfiable instances");
+  if (par) msg (1, "using par%d score", par);
   if (orderpath) parseorder ();
   for (i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "-t") ||
