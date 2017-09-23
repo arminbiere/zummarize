@@ -1939,8 +1939,10 @@ static void printcactus () {
       t = usereal ? e->wll : e->tim;
       if (printed++) fprintf (rscriptfile, ",");
       else fprintf (rscriptfile, "c(");
-      if (deeponly) fprintf (rscriptfile, "%d", e->bnd);
-      else fprintf (rscriptfile, "%.2f", t);
+      if (deeponly) {
+	fprintf (rscriptfile, "%d",
+	  e->bnd > capped ? capped : e->bnd);
+      } else fprintf (rscriptfile, "%.2f", t);
     }
     fprintf (rscriptfile, ")\n");
     fprintf (rscriptfile, "z%d = sort (z%d)\n", c, c);
