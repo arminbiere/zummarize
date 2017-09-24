@@ -1940,8 +1940,13 @@ static void printcactus () {
       if (printed++) fprintf (rscriptfile, ",");
       else fprintf (rscriptfile, "c(");
       if (deeponly) {
-	fprintf (rscriptfile, "%d",
-	  e->bnd > capped ? capped : e->bnd);
+	int b = e->bnd > capped ? capped : e->bnd;
+#if 1
+	fprintf (rscriptfile, "%d", b);
+#else
+	double s = capped - capped / (b + 2.0);
+	fprintf (rscriptfile, "%f", s);
+#endif
       } else fprintf (rscriptfile, "%.2f", t);
     }
     fprintf (rscriptfile, ")\n");
