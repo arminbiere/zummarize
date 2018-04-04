@@ -203,6 +203,8 @@ static const char * USAGE =
 "-v             increase verbose level (maximum 3, default 0)\n"
 "-f             recompute zummaries (do not read '<dir>/zummary' files)\n"
 "\n"
+"-n|--no-warnings\n"
+"\n"
 "-a|--all       report all column and rows (even with zero entries)\n"
 "-s|--sat       report goes over satisfiable instances only\n"
 "-u|--unsat     report goes over unsatisfiable instances only\n"
@@ -2196,7 +2198,8 @@ int main (int argc, char ** argv) {
   for (i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
-    else if (!strcmp (argv[i], "--no-warnings")) nowarnings = 1;
+    else if (!strcmp (argv[i], "--no-warnings") ||
+             !strcmp (argv[i], "-n")) nowarnings = 1;
     else if (!strcmp (argv[i], "-f")) force++;
     else if (!strcmp (argv[i], "--all") ||
              !strcmp (argv[i], "-a")) printall = 1;
