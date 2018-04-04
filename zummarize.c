@@ -46,7 +46,7 @@ typedef struct Order {
 } Order;
 
 static int verbose, force, printall, nowrite, nobounds, par;
-static int satonly, unsatonly, deeponly, cactus;
+static int nowarnings, satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
 static int solved, unsolved;
 
@@ -89,6 +89,7 @@ static void die (const char * fmt, ...) {
 
 static void wrn (const char * fmt, ...) {
   va_list ap;
+  if (nowarnings) return;
   fputs ("*** zummarize warning: ", stdout);
   va_start (ap, fmt);
   vfprintf (stdout, fmt, ap);
@@ -2195,6 +2196,7 @@ int main (int argc, char ** argv) {
   for (i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "-h")) usage ();
     else if (!strcmp (argv[i], "-v")) verbose++;
+    else if (!strcmp (argv[i], "--no-warnings")) nowarnings = 1;
     else if (!strcmp (argv[i], "-f")) force++;
     else if (!strcmp (argv[i], "--all") ||
              !strcmp (argv[i], "-a")) printall = 1;
