@@ -48,7 +48,7 @@ typedef struct Order {
 static int verbose, force, printall, nowrite, nobounds, par;
 static int nowarnings, satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
-static int solved, unsolved;
+static int solved, unsolved, cmp, filter;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -214,6 +214,8 @@ static const char * USAGE =
 "-r|--rank      print number of times benchmark has been solved\n"
 "--unsolved     print unsolved (never solved) instances\n"
 "--solved       print all at least once solved instances\n"
+"--filter       filter out solved in comparison\n"
+"--cmp          compare two runs\n"
 "\n"
 "--par<x>       use PAR<X> score\n"
 "\n"
@@ -1957,6 +1959,50 @@ static void printdeep () {
   pclose (file);
 }
 
+static double ratio (double a, double b) {
+  if (!a && !b) return 1;
+  if (!a) return 0;
+  if (!b) return 1e9;
+  return a / b;
+}
+
+static int cmpcmp4qsort (const void * p1, const void * p2) {
+  Symbol * s1 = * (Symbol **) p1;
+  Symbol * s2 = * (Symbol **) p2;
+  double r1 = ratio (s1->first->tim, s1->last->tim);
+  double r2 = ratio (s2->first->tim, s2->last->tim);
+  if (r1 > r2) return -1;
+  if (r1 < r2) return 1;
+  if (s1->first->tim > s2->first->tim) return -1;
+  if (s1->first->tim > s2->first->tim) return 1;
+  return strcmp (s1->name, s2->name);
+}
+
+static void compare () {
+  Symbol ** a = malloc (nsyms * sizeof *a);
+  int i, n = 0;
+  if (!a) die ("out of memory allocating comparison table");
+  for (i = 0; i < nsyms; i++) {
+    Symbol * s = symtab[i];
+    Entry * e1 = s->first, * e2 = s->last;
+    if (!e1) continue;
+    assert (e2);
+    int r1 = (e1->res == 10 || e1->res == 20);
+    int r2 = (e2->res == 10 || e2->res == 20);
+    if (filter && r1 + r2 != 1) continue;
+    if (!filter && r1 + r2 == 0) continue;
+    a[n++] = s;
+  }
+  qsort (a, n, sizeof *a, cmpcmp4qsort);
+  for (int i = 0; i < n; i++) {
+    Symbol * s = a[i];
+    Entry * e1 = s->first, * e2 = s->last;
+    printf ("%.2f %s %.2f %.2f\n",
+      ratio (e1->tim, e2->tim), s->name, e1->tim, e2->tim);
+  }
+  free (a);
+}
+
 static void printcactus () {
   char prefix[80], rscriptpath[100], pdfpathbuf[100], cmd[200];
   int i, c, skip = skiprefixlength (), maxbnd, res;
@@ -2160,6 +2206,7 @@ static void zummarizeall () {
     sortzummaries ();
     if (solved || unsolved || rank) printranked ();
     else if (cactus) printcactus ();
+    else if (cmp) compare ();
     else {
       printzummaries ();
       if (deeponly) printdeep ();
@@ -2224,7 +2271,9 @@ int main (int argc, char ** argv) {
       if (unsolved)
 	die ("can not combine '--unsolved' and '--solved'");
       solved = 1;
-    } else if (!strcmp (argv[i], "--unsolved")) {
+    } else if (!strcmp (argv[i], "--cmp")) cmp = 1;
+    else if (!strcmp (argv[i], "--filter")) filter = 1;
+    else if (!strcmp (argv[i], "--unsolved")) {
       if (unsolved) die ("'--unsolved' specified twice");
       if (solved)
 	die ("can not combine '--solved' and '--unsolved'");
@@ -2258,6 +2307,7 @@ int main (int argc, char ** argv) {
     else count++;
   }
   if (!count) die ("no directory specified (try '-h')");
+  if (cmp && count != 2) die ("'--cmp' requires two directories");
   if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
   if (title && !cactus) die ("title defined without cactus");
   if (outputpath && !cactus) die ("output file specfied without cactus");
