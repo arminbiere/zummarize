@@ -201,7 +201,8 @@ static const char * USAGE =
 "\n"
 "-h             print this command line option zummary\n"
 "-v             increase verbose level (maximum 3, default 0)\n"
-"-f             recompute zummaries (do not read '<dir>/zummary' files)\n"
+"-f||force      recompute zummaries (do not read '<dir>/zummary' files)\n"
+"               and ignore mismatching bounds\n"
 "\n"
 "-n|--no-warnings\n"
 "\n"
@@ -1989,6 +1990,10 @@ static void compare () {
     assert (e2);
     int r1 = (e1->res == 10 || e1->res == 20);
     int r2 = (e2->res == 10 || e2->res == 20);
+    if (satonly && e1->res == 20) continue;
+    if (satonly && e2->res == 20) continue;
+    if (unsatonly && e1->res == 10) continue;
+    if (unsatonly && e2->res == 10) continue;
     if (filter && r1 + r2 != 1) continue;
     if (!filter && r1 + r2 == 0) continue;
     a[n++] = s;
@@ -2247,7 +2252,6 @@ int main (int argc, char ** argv) {
     else if (!strcmp (argv[i], "-v")) verbose++;
     else if (!strcmp (argv[i], "--no-warnings") ||
              !strcmp (argv[i], "-n")) nowarnings = 1;
-    else if (!strcmp (argv[i], "-f")) force++;
     else if (!strcmp (argv[i], "--all") ||
              !strcmp (argv[i], "-a")) printall = 1;
     else if (!strcmp (argv[i], "--sat") ||
