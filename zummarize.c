@@ -144,7 +144,7 @@ static void close_input (const char * path) {
   size_t bytes;
   assert (input.opened);
   bytes = input.end - input.start;
-  if (munmap (input.start, bytes))
+  if (munmap (input.start, bytes) && verbose)
     wrn ("failed to unmap '%s' from memory", path);
   if (close (input.fd))
     wrn ("failed to close file '%s'", path);
