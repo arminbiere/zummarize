@@ -962,6 +962,7 @@ SEEN_S:
   ch = nextch ();
   if (ch == 'S') goto SEEN_S_S;
   if (ch == 'U') goto SEEN_S_U;
+  if (ch == 'O') goto SEEN_S_O;
   if (ch == '\n') goto START;
   goto WAIT;
 SEEN_U:
@@ -1075,6 +1076,51 @@ SEEN_S_U:
   if (ch != '\n') goto WAIT;
   this = "s UNSATISFIABLE";
   goto UNSAT;
+SEEN_S_O:
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'P') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'T') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'I') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'M') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch == 'I') {			// TODO remove ...
+    ch = nextch ();
+    if (ch == '\n') goto START;
+  }
+  if (ch != 'U') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'M') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != ' ') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'F') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'O') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'U') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'N') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != 'D') goto WAIT;
+  ch = nextch ();
+  if (ch != '\n') goto WAIT;
+  this = "s OPTIMUM FOUND";
+  goto SAT;
 SEEN_C_S:
   ch = nextch ();
   if (ch == '\n') goto START;
