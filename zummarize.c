@@ -29,6 +29,7 @@ typedef struct Entry {
   char tio, meo, unk, dis, s11, si6;
   double wll, tim, mem;
   int res, bnd, maxubnd, minsbnd;
+  long obnd;
 } Entry;
 
 typedef struct Zummary {
@@ -37,7 +38,7 @@ typedef struct Zummary {
   int cnt, sol, sat, uns, dis, fld, tio, meo, s11, si6, unk, bnd, bst, unq;
   double wll, tim, par, mem, max, tlim, rlim, slim, deep;
   int only_use_for_reporting_and_do_not_write;
-  char ubndbroken;
+  char ubndbroken, obndbroken;
 } Zummary;
 
 typedef struct Order {
@@ -554,6 +555,7 @@ static Entry * newentry (Zummary * z, const char * name) {
   memset (res, 0, sizeof *res);
   res->zummary = z;
   res->bnd = res->maxubnd = res->minsbnd = -1;
+  res->obnd = -1;
   if (nsyms == sizesymtab) enlargesymtab ();
   h = hashstr (name) & (sizesymtab - 1);
   searches++;
@@ -830,7 +832,7 @@ static void sortzummary (Zummary * z) {
   free (entries);
 }
 
-static int getposnum (int ch) {
+static int getposint (int ch) {
   int res, digit;
   assert (isdigit (ch));
   res = ch - '0';
@@ -839,6 +841,22 @@ static int getposnum (int ch) {
     res *= 10;
     digit = (ch - '0');
     if (INT_MAX - digit < res) return -1;
+    res += digit;
+  }
+  if (ch != '\n') return -1;
+  return res;
+}
+
+static long getposlong (int ch) {
+  long res;
+  int digit;
+  assert (isdigit (ch));
+  res = ch - '0';
+  while (isdigit (ch = nextch ())) {
+    if (LONG_MAX/10 < res) return -1;
+    res *= 10;
+    digit = (ch - '0');
+    if (LONG_MAX - digit < res) return -1;
     res += digit;
   }
   if (ch != '\n') return -1;
@@ -861,6 +879,7 @@ static void setubndbroken (Entry * e, int broken_level) {
 static void parselogfile (Entry * e, const char * logpath) {
   const char * other = 0, * this = 0;
   int found, ch, bnd;
+  long obnd = -1;
   assert (!e->res);
   msg (2, "parsing log file '%s'", logpath);
   open_input (logpath);
@@ -873,6 +892,7 @@ START:
   if (ch == '0') goto SEEN_0;
   if (ch == 's') goto SEEN_S;
   if (ch == 'u') goto SEEN_U;
+  if (ch == 'o') goto SEEN_O;
   if (ch == 'S') goto SEEN_C_S;
   if (ch == 'U') goto SEEN_C_U;
 WAIT:
@@ -949,7 +969,7 @@ SEEN_S:
   assert (ch == 's');
   ch = nextch ();
   if (isdigit (ch)) {
-    bnd = getposnum (ch);
+    bnd = getposint (ch);
     if (bnd < 0) goto WAIT;
     msg (2, "found 's%d' line", bnd);
     if (e->minsbnd < 0 || e->minsbnd > bnd)
@@ -969,7 +989,7 @@ SEEN_U:
   assert (ch == 'u');
   ch = nextch ();
   if (isdigit (ch)) {
-    bnd = getposnum (ch);
+    bnd = getposint (ch);
     if (bnd < 0) goto WAIT;
     msg (2, "found 'u%d' line", bnd);
     if (e->maxubnd < 0 || e->maxubnd < bnd)
@@ -991,6 +1011,19 @@ SEEN_U:
   if (ch != '\n') goto WAIT;
   this = "unsat";
   goto UNSAT;
+SEEN_O:
+  assert (ch == 'o');
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (ch != ' ') goto WAIT;
+  ch = nextch ();
+  if (ch == '\n') goto START;
+  if (!isdigit (ch)) goto WAIT;
+  obnd = getposlong (ch);
+  if (obnd < 0) goto WAIT;
+  msg (2, "found 'o %ld' line in '%s'", obnd, logpath);
+  e->obnd = obnd;
+  goto START;
 SEEN_SA:
   assert (ch == 'a');
   ch = nextch ();
@@ -1604,24 +1637,42 @@ static void discrepancies () {
   count = 0;
   for (i = 0; i < nsyms; i++) {
     Symbol * s = symtab[i];
-    Entry * e, * w = 0;
+    Entry * e, * w = 0, * o1 = 0, * o2 = 0;
     for (e = s->first; e; e = e->chain) {
       if (e->dis) continue;
       if (e->res != 10) continue;
       if (e->bnd < 0) continue;
       if (w && w->bnd <= e->bnd) continue;
+      if (e->obnd >= 0) {
+	if (o1 && !o2 && o1->obnd != e->obnd) o2 = e;
+	if (!o1) o1 = e;
+      }
       w = e;
     }
-    if (!w) continue;
-    for (e = s->first; e; e = e->chain) {
-      if (e->dis) continue;
-      if (e->res == 10) continue;
-      assert (e->res != 20);
-      if (e->bnd < w->bnd) continue;
-      wrn ("unsat-bound %d in '%s/%s' >= witness length %d in '%s/%s'",
-	e->bnd, e->zummary->path, e->name, 
-	w->bnd, w->zummary->path, w->name);
-      setubndbroken (e, UBND_GLOBALLY_BROKEN);
+    if (w) {
+      for (e = s->first; e; e = e->chain) {
+	if (e->dis) continue;
+	if (e->res == 10) continue;
+	assert (e->res != 20);
+	if (e->bnd < w->bnd) continue;
+	wrn ("unsat-bound %d in '%s/%s' >= witness length %d in '%s/%s'",
+	  e->bnd, e->zummary->path, e->name, 
+	  w->bnd, w->zummary->path, w->name);
+	setubndbroken (e, UBND_GLOBALLY_BROKEN);
+      }
+    }
+    if (o1 && o2) {
+      assert (o1->obnd >= 0);
+      assert (o2->obnd >= 0);
+      assert (o1->obnd != o2->obnd);
+      wrn ("optimum %ld in '%s/%s' does not match %ld in '%s/%s'",
+	   o1->bnd, o1->zummary->path, o1->name, 
+	   o2->bnd, o2->zummary->path, o2->name);
+      for (e = s->first; e; e = e->chain) {
+	if (e->dis) continue;
+	if (e->res != 10) continue;
+	e->dis = 1;
+      }
     }
   }
 }
