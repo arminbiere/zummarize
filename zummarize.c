@@ -46,7 +46,7 @@ typedef struct Order {
   int order;
 } Order;
 
-static int verbose, force, printall, nowrite, nobounds, par;
+static int verbose, force, ignore, printall, nowrite, nobounds, par;
 static int nowarnings, satonly, unsatonly, deeponly, cactus;
 static const char * title, * outputpath;
 static int solved, unsolved, cmp, filter;
@@ -75,7 +75,6 @@ static int usereal;
 static int capped = 1000;
 static int logy;
 static int merge;
-static int force;
 static int rank;
 
 static void die (const char * fmt, ...) {
@@ -202,8 +201,8 @@ static const char * USAGE =
 "\n"
 "-h             print this command line option zummary\n"
 "-v             increase verbose level (maximum 3, default 0)\n"
-"-f||force      recompute zummaries (do not read '<dir>/zummary' files)\n"
-"               and ignore mismatching bounds\n"
+"-f|--force     recompute zummaries (do not read '<dir>/zummary' files)\n"
+"-i|--ignore    ignore mismatching limits and bounds\n"
 "\n"
 "-n|--no-warnings\n"
 "\n"
@@ -1405,7 +1404,7 @@ static void loadzummary (Zummary * z, const char * path) {
       if (z->tlim < 0) {
 	msg (1, "setting time limit of '%s' to %.0f", z->path, tlim);
 	z->tlim = tlim;
-      } else if (z->tlim != tlim)
+      } else if (!ignore && z->tlim != tlim)
         die ("different time limit %.0f in '%s'", tlim, path);
       rlim = atof (tokens[6]);
       if (rlim <= 0)
@@ -1413,7 +1412,7 @@ static void loadzummary (Zummary * z, const char * path) {
       if (z->rlim < 0) {
 	msg (1, "setting real time limit of '%s' to %.0f", z->path, rlim);
 	z->rlim = rlim;
-      } else if (z->rlim != rlim)
+      } else if (!ignore && z->rlim != rlim)
         die ("different real time limit %.0f in '%s'", rlim, path);
       slim = atof (tokens[7]);
       if (slim <= 0)
@@ -1421,7 +1420,7 @@ static void loadzummary (Zummary * z, const char * path) {
       if (z->slim < 0) {
 	msg (1, "setting space limit of '%s' to %.0f", z->path, slim);
 	z->slim = slim;
-      } else if (!force && z->slim != slim)
+      } else if (!ignore && z->slim != slim)
         die ("different space limit %.0f in '%s'", slim, path);
       if (ntokens < 9 || (e->bnd = atof (tokens[8])) < 0)
 	e->bnd = -1;
@@ -1515,11 +1514,11 @@ static void updatezummary (Zummary * z) {
     if (z->rlim < 0) die ("no real time limit in '%s'", z->path);
     if (z->slim < 0) die ("no space limit in '%s'", z->path);
     if (nzummaries > 1 && z->cnt) {
-      if (z->tlim != zummaries[0]->tlim)
+      if (!ignore && z->tlim != zummaries[0]->tlim)
 	die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
-      if (z->rlim != zummaries[0]->rlim)
+      if (!ignore && z->rlim != zummaries[0]->rlim)
 	die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
-      if (!force && z->slim != zummaries[0]->slim)
+      if (!ignore && z->slim != zummaries[0]->slim)
 	die ("different space limit '%.0f' in '%s'", z->slim, z->path);
     }
   }
@@ -1687,11 +1686,11 @@ static void checklimits () {
   while (i < nzummaries) {
     z = zummaries[i++];
     if (!z->cnt) continue;
-    if (y->tlim != z->tlim)
+    if (!ignore && y->tlim != z->tlim)
       die ("different time limit in '%s' and '%s'", y->path, z->path);
-    if (y->rlim != z->rlim)
+    if (!ignore && y->rlim != z->rlim)
       die ("different real time limit in '%s' and '%s'", y->path, z->path);
-    if (!force && y->slim != z->slim)
+    if (!ignore && y->slim != z->slim)
       die ("different space limit in '%s' and '%s'", y->path, z->path);
   }
   msg (1, "all zummaries have the same time and space limits");
@@ -2367,6 +2366,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-r")) rank = 1;
     else if (!strcmp (argv[i], "--force") ||
              !strcmp (argv[i], "-f")) force = 1;
+    else if (!strcmp (argv[i], "--ignore") ||
+             !strcmp (argv[i], "-i")) ignore = 1;
     else if (!strcmp (argv[i], "--solved")) {
       if (solved) die ("'--solved' specified twice");
       if (unsolved)
