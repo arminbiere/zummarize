@@ -2193,6 +2193,22 @@ static void printcactus () {
 	fprintf (rscriptfile,
 	  "abline (%d, 0,lty=3)\n",
 	  capped);
+      } else if (cdf) { 
+	fprintf (rscriptfile,
+	  "plot ("
+	  "c(0,%.2f+%.2f),"
+	  "c(0,%d+10),"
+	  "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+	  (usereal ? z->rlim : z->tlim),
+	  0.02*(usereal ? z->rlim : z->tlim),
+	  z->sol,
+	  title ? title : "",
+	  logy ? ",log=\"y\"" : "");
+#if 0
+	fprintf (rscriptfile,
+	  "abline (%.0f, 0,lty=3)\n",
+	  usereal ? z->rlim : z->tlim);
+#endif
       } else {
 	fprintf (rscriptfile,
 	  "plot (c(0,%d+10),c(0,%.2f+%.2f),"
@@ -2207,12 +2223,15 @@ static void printcactus () {
 	  usereal ? z->rlim : z->tlim);
       }
     }
-    fprintf (rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c, c, c);
+    if (cdf)
+      fprintf (rscriptfile, "points (x=z%d,y=1:length(z%d),col=m[%d],pch=m[%d],type=\"o\")\n", c, c, c, c);
+    else
+      fprintf (rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c, c, c);
   }
   if (nzummaries) {
     z = zummaries[0];
     fprintf (rscriptfile,
-      "legend (x=\"left\",legend=c(");
+      "legend (x=\"%s\",legend=c(", cdf ? "right" : "left");
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
