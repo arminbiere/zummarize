@@ -47,7 +47,7 @@ typedef struct Order {
 } Order;
 
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
-static int nowarnings, satonly, unsatonly, deeponly, cactus;
+static int nowarnings, satonly, unsatonly, deeponly, cactus, cdf;
 static const char * title, * outputpath;
 static int solved, unsolved, cmp, filter;
 
@@ -210,7 +210,8 @@ static const char * USAGE =
 "-s|--sat       report goes over satisfiable instances only\n"
 "-u|--unsat     report goes over unsatisfiable instances only\n"
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
-"-c|--cactus    generate cactus\n"
+"-c|--cactus    generate cactus plot\n"
+"--cdf          generate cumulative distribution function\n"
 "-m|--merge     merge zummaries by benchmark\n"
 "-r|--rank      print number of times benchmark has been solved\n"
 "--unsolved     print unsolved (never solved) instances\n"
@@ -2306,7 +2307,7 @@ static void zummarizeall () {
     computedeep ();
     sortzummaries ();
     if (solved || unsolved || rank) printranked ();
-    else if (cactus) printcactus ();
+    else if (cactus || cdf) printcactus ();
     else if (cmp) compare ();
     else {
       printzummaries ();
@@ -2358,6 +2359,7 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-d")) deeponly = 1;
     else if (!strcmp (argv[i], "--cactus") ||
              !strcmp (argv[i], "-c")) cactus = 1;
+    else if (!strcmp (argv[i], "--cdf")) cdf = 1;
     else if (!strcmp (argv[i], "--log") ||
              !strcmp (argv[i], "-l")) logy = 1;
     else if (!strcmp (argv[i], "--merge") ||
