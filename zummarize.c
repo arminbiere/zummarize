@@ -47,9 +47,10 @@ typedef struct Order {
 } Order;
 
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
-static int nowarnings, satonly, unsatonly, deeponly, cactus, cdf;
+static int nowarnings, satonly, unsatonly, deeponly;
 static const char * title, * outputpath;
 static int solved, unsolved, cmp, filter;
+static int plotting, cactus, cdf;
 
 static Zummary ** zummaries;
 static int nzummaries, sizezummaries;
@@ -210,7 +211,8 @@ static const char * USAGE =
 "-s|--sat       report goes over satisfiable instances only\n"
 "-u|--unsat     report goes over unsatisfiable instances only\n"
 "-d|--deep      report goes over unsolved instances only (sorted by deep)\n"
-"-c|--cactus    generate cactus plot\n"
+"-c|--plot      print plot (default is 'CDF' not 'cactus')\n"
+"--cactus       generate classical SAT competition cactus plot\n"
 "--cdf          generate cumulative distribution function\n"
 "-m|--merge     merge zummaries by benchmark\n"
 "-r|--rank      print number of times benchmark has been solved\n"
@@ -435,7 +437,7 @@ static void insertorder (const char * name) {
 }
 
 static void parseorder () {
-  assert (cactus);
+  assert (plotting);
   assert (orderpath);
   open_input (orderpath);
   while (parseorderline ())
@@ -2105,13 +2107,13 @@ static void compare () {
   free (a);
 }
 
-static void printcactus () {
+static void plot () {
   char prefix[80], rscriptpath[100], pdfpathbuf[100], cmd[200];
   int i, c, skip = skiprefixlength (), maxbnd, res;
   const char * pdfpath;
   FILE * rscriptfile;
   Zummary * z;
-  sprintf (prefix, "/tmp/zummarize-print-cactus-nopidyet");
+  sprintf (prefix, "/tmp/zummarize-plot-nopidyet");
   sprintf (rscriptpath, "%s.rscript", prefix);
   if (outputpath) pdfpath = outputpath;
   else {
@@ -2147,6 +2149,7 @@ static void printcactus () {
   c = 0;
   for (i = 0; i < nzummaries; i++) {
     z = zummaries[i];
+    if (!z->cnt) continue;
     int printed;
     Entry * e;
     if (satonly && !z->sat) continue;
@@ -2236,6 +2239,7 @@ static void printcactus () {
   c = 0;
   for (i = 0; i < nzummaries; i++) {
     z = zummaries[i];
+    if (!z->cnt) continue;
     if (satonly && !z->sat) continue;
     if (unsatonly && !z->uns) continue;
     if (deeponly && !z->deep) continue;
@@ -2326,7 +2330,7 @@ static void zummarizeall () {
     computedeep ();
     sortzummaries ();
     if (solved || unsolved || rank) printranked ();
-    else if (cactus || cdf) printcactus ();
+    else if (plotting) plot ();
     else if (cmp) compare ();
     else {
       printzummaries ();
@@ -2376,9 +2380,12 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-u")) unsatonly = 1;
     else if (!strcmp (argv[i], "--deep") ||
              !strcmp (argv[i], "-d")) deeponly = 1;
-    else if (!strcmp (argv[i], "--cactus") ||
-             !strcmp (argv[i], "-c")) cactus = 1;
-    else if (!strcmp (argv[i], "--cdf")) cdf = 1;
+    else if (!strcmp (argv[i], "--cactus"))
+      plotting = cactus = 1, cdf = 0;
+    else if (!strcmp (argv[i], "--cdf") ||
+             !strcmp (argv[i], "--plotting") ||
+             !strcmp (argv[i], "-c"))
+      plotting = cdf = 1, cactus = 0;
     else if (!strcmp (argv[i], "--log") ||
              !strcmp (argv[i], "-l")) logy = 1;
     else if (!strcmp (argv[i], "--merge") ||
@@ -2429,12 +2436,13 @@ int main (int argc, char ** argv) {
       wrn ("argument '%s' not a directory (try '-h')", argv[i]);
     else count++;
   }
+  assert (!cactus || !cdf);
   if (!count) die ("no directory specified (try '-h')");
   if (cmp && count != 2) die ("'--cmp' requires two directories");
   if (satonly && unsatonly) die ("'--sat-only' and '--unsat-only'");
-  if (title && !cactus) die ("title defined without cactus");
-  if (outputpath && !cactus) die ("output file specfied without cactus");
-  if (cactus && merge) die ("can not print cactus and merged data");
+  if (title && !plotting) die ("title defined without ploting");
+  if (outputpath && !plotting) die ("output file specfied without ploting");
+  if (plotting && merge) die ("can not plot and merge data");
   if (nowrite) msg (1, "will not write zummaries");
   else msg (1, "will generate or update existing zummaries");
   if (nobounds) msg (1, "will not write bounds");
