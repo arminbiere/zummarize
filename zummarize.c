@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <limits.h>
+#include <unistd.h>
 #ifndef NMMAP
 #include <sys/mman.h>
 #include <fcntl.h>
@@ -2113,7 +2114,7 @@ static void plot () {
   const char * pdfpath;
   FILE * rscriptfile;
   Zummary * z;
-  sprintf (prefix, "/tmp/zummarize-plot-nopidyet");
+  sprintf (prefix, "/tmp/zummarize-plot-%ld", (long) getpid ());
   sprintf (rscriptpath, "%s.rscript", prefix);
   if (outputpath) pdfpath = outputpath;
   else {
