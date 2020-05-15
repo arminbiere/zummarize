@@ -2235,7 +2235,7 @@ static void plot () {
   if (nzummaries) {
     z = zummaries[0];
     fprintf (rscriptfile,
-      "legend (x=\"%s\",legend=c(", cdf ? "right" : "left");
+      "legend (x=\"%s\",legend=c(", cdf ? "bottomright" : "topleft");
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
