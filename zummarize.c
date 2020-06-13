@@ -48,7 +48,7 @@ typedef struct Order {
 } Order;
 
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
-static int nowarnings, satonly, unsatonly, deeponly;
+static int nowarnings, satonly, unsatonly, deeponly, just;
 static const char * title, * outputpath;
 static int solved, unsolved, cmp, filter;
 static int plotting, cactus, cdf;
@@ -205,6 +205,7 @@ static const char * USAGE =
 "-v             increase verbose level (maximum 3, default 0)\n"
 "-f|--force     recompute zummaries (do not read '<dir>/zummary' files)\n"
 "-i|--ignore    ignore mismatching limits and bounds\n"
+"-j|--just      assume terminated are just solved (unsat)\n"
 "\n"
 "-n|--no-warnings\n"
 "\n"
@@ -1239,6 +1240,10 @@ DONE:
   if (other) assert (e->res == 10 || e->res == 20);
   else {
     msg (2, "no proper sat/unsat line found in '%s'", logpath);
+    if (just) {
+      msg (2, "'--just'' option forces UNSAT result '%s'", logpath);
+      e->res = 20;
+    }
     assert (!e->res);
   }
   if (e->minsbnd >= 0)
@@ -1644,13 +1649,11 @@ static void discrepancies () {
     for (e = s->first; e; e = e->chain) {
       if (e->dis) continue;
       if (e->res != 10) continue;
-      if (e->bnd < 0) continue;
-      if (w && w->bnd <= e->bnd) continue;
+      if (w && e->bnd >= 0 && w->bnd > e->bnd) w = e;
       if (e->obnd >= 0) {
 	if (o1 && !o2 && o1->obnd != e->obnd) o2 = e;
 	if (!o1) o1 = e;
       }
-      w = e;
     }
     if (w) {
       for (e = s->first; e; e = e->chain) {
@@ -1669,8 +1672,8 @@ static void discrepancies () {
       assert (o2->obnd >= 0);
       assert (o1->obnd != o2->obnd);
       wrn ("optimum %ld in '%s/%s' does not match %ld in '%s/%s'",
-	   o1->bnd, o1->zummary->path, o1->name, 
-	   o2->bnd, o2->zummary->path, o2->name);
+	   o1->obnd, o1->zummary->path, o1->name, 
+	   o2->obnd, o2->zummary->path, o2->name);
       for (e = s->first; e; e = e->chain) {
 	if (e->dis) continue;
 	if (e->res != 10) continue;
@@ -2397,6 +2400,8 @@ int main (int argc, char ** argv) {
              !strcmp (argv[i], "-f")) force = 1;
     else if (!strcmp (argv[i], "--ignore") ||
              !strcmp (argv[i], "-i")) ignore = 1;
+    else if (!strcmp (argv[i], "--just") ||
+             !strcmp (argv[i], "-j")) just = 1;
     else if (!strcmp (argv[i], "--solved")) {
       if (solved) die ("'--solved' specified twice");
       if (unsolved)
