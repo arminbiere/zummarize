@@ -48,7 +48,7 @@ typedef struct Order {
 } Order;
 
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
-static int nowarnings, satonly, unsatonly, deeponly, just;
+static int nowarnings, satonly, unsatonly, deeponly, just, center;
 static const char * title, * outputpath;
 static int solved, unsolved, cmp, filter;
 static int plotting, cactus, cdf;
@@ -216,6 +216,7 @@ static const char * USAGE =
 "-c|--plot      print plot (default is 'CDF' not 'cactus')\n"
 "--cactus       generate classical SAT competition cactus plot\n"
 "--cdf          generate cumulative distribution function\n"
+"--center       center legend vertically\n"
 "-m|--merge     merge zummaries by benchmark\n"
 "-r|--rank      print number of times benchmark has been solved\n"
 "--unsolved     print unsolved (never solved) instances\n"
@@ -2237,8 +2238,12 @@ static void plot () {
   }
   if (nzummaries) {
     z = zummaries[0];
-    fprintf (rscriptfile,
-      "legend (x=\"%s\",legend=c(", cdf ? "bottomright" : "topleft");
+    if (center)
+      fprintf (rscriptfile,
+	"legend (x=\"%s\",legend=c(", cdf ? "right" : "left");
+    else
+      fprintf (rscriptfile,
+	"legend (x=\"%s\",legend=c(", cdf ? "bottomright" : "topleft");
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
@@ -2392,6 +2397,8 @@ int main (int argc, char ** argv) {
       plotting = cdf = 1, cactus = 0;
     else if (!strcmp (argv[i], "--log") ||
              !strcmp (argv[i], "-l")) logy = 1;
+    else if (!strcmp (argv[i], "--center") ||
+      center = 1;
     else if (!strcmp (argv[i], "--merge") ||
              !strcmp (argv[i], "-m")) merge = 1;
     else if (!strcmp (argv[i], "--rank") ||
