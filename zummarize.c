@@ -2397,7 +2397,7 @@ int main (int argc, char ** argv) {
       plotting = cdf = 1, cactus = 0;
     else if (!strcmp (argv[i], "--log") ||
              !strcmp (argv[i], "-l")) logy = 1;
-    else if (!strcmp (argv[i], "--center") ||
+    else if (!strcmp (argv[i], "--center"))
       center = 1;
     else if (!strcmp (argv[i], "--merge") ||
              !strcmp (argv[i], "-m")) merge = 1;
