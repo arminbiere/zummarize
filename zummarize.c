@@ -1415,7 +1415,7 @@ static void loadzummary (Zummary * z, const char * path) {
 	msg (1, "setting time limit of '%s' to %.0f", z->path, tlim);
 	z->tlim = tlim;
       } else if (!ignore && z->tlim != tlim)
-        die ("different time limit %.0f in '%s'", tlim, path);
+        wrn ("different time limit %.0f in '%s'", tlim, path);
       rlim = atof (tokens[6]);
       if (rlim <= 0)
 	die ("invalid real time limit %.0f in '%s'", rlim, path);
@@ -1423,7 +1423,7 @@ static void loadzummary (Zummary * z, const char * path) {
 	msg (1, "setting real time limit of '%s' to %.0f", z->path, rlim);
 	z->rlim = rlim;
       } else if (!ignore && z->rlim != rlim)
-        die ("different real time limit %.0f in '%s'", rlim, path);
+        wrn ("different real time limit %.0f in '%s'", rlim, path);
       slim = atof (tokens[7]);
       if (slim <= 0)
 	die ("invalid space limit %.0f in '%s'", slim, path);
@@ -1431,7 +1431,7 @@ static void loadzummary (Zummary * z, const char * path) {
 	msg (1, "setting space limit of '%s' to %.0f", z->path, slim);
 	z->slim = slim;
       } else if (!ignore && z->slim != slim)
-        die ("different space limit %.0f in '%s'", slim, path);
+        wrn ("different space limit %.0f in '%s'", slim, path);
       if (ntokens < 9 || (e->bnd = atof (tokens[8])) < 0)
 	e->bnd = -1;
       if (ntokens == 9)
@@ -1525,11 +1525,11 @@ static void updatezummary (Zummary * z) {
     if (z->slim < 0) die ("no space limit in '%s'", z->path);
     if (nzummaries > 1 && z->cnt) {
       if (!ignore && z->tlim != zummaries[0]->tlim)
-	die ("different time limit '%.0f' in '%s'", z->tlim, z->path);
+	wrn ("different time limit '%.0f' in '%s'", z->tlim, z->path);
       if (!ignore && z->rlim != zummaries[0]->rlim)
-	die ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
+	wrn ("different real time limit '%.0f' in '%s'", z->rlim, z->path);
       if (!ignore && z->slim != zummaries[0]->slim)
-	die ("different space limit '%.0f' in '%s'", z->slim, z->path);
+	wrn ("different space limit '%.0f' in '%s'", z->slim, z->path);
     }
   }
   sortzummary (z);
@@ -1695,11 +1695,11 @@ static void checklimits () {
     z = zummaries[i++];
     if (!z->cnt) continue;
     if (!ignore && y->tlim != z->tlim)
-      die ("different time limit in '%s' and '%s'", y->path, z->path);
+      wrn ("different time limit in '%s' and '%s'", y->path, z->path);
     if (!ignore && y->rlim != z->rlim)
-      die ("different real time limit in '%s' and '%s'", y->path, z->path);
+      wrn ("different real time limit in '%s' and '%s'", y->path, z->path);
     if (!ignore && y->slim != z->slim)
-      die ("different space limit in '%s' and '%s'", y->path, z->path);
+      wrn ("different space limit in '%s' and '%s'", y->path, z->path);
   }
   msg (1, "all zummaries have the same time and space limits");
   if (y->tlim >= y->rlim) {
