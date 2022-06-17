@@ -2436,7 +2436,10 @@ int main (int argc, char ** argv) {
       orderpath = argv[++i];
     } else if (!strcmp (argv[i], "--no-write")) nowrite = 1;
     else if (!strcmp (argv[i], "--no-bounds")) nobounds = 1;
-    else if (argv[i][0] == '-' && argv[i][1] == '-' &&
+    else if (!strcmp (argv[i], "--update")) {
+      if (system ("./update.sh"))
+	die ("calling './update.sh' failed");
+    } else if (argv[i][0] == '-' && argv[i][1] == '-' &&
              argv[i][2] == 'p' && argv[i][3] == 'a' && argv[i][4] == 'r') {
       if (!isdigit (argv[i][5]) ||
           (argv[i][6] && !isdigit (argv[i][6])) ||
