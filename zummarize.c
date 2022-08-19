@@ -697,7 +697,10 @@ static int parserrfile (Entry * e, const char * errpath) {
 	  msg (1,
 	    "error file '%s' with different space limit '%.0f'",
 	    errpath, slim);
-	  res = 0;
+	  if (e->zummary->slim < slim) {
+	    msg (1, "increasing space limit to '%.0f'", slim);
+	    e->zummary->slim = slim;
+	  }
 	}
       }
     } else if (ntokens > 2 &&
