@@ -2109,8 +2109,20 @@ static void compare () {
   for (int i = 0; i < n; i++) {
     Symbol * s = a[i];
     Entry * e1 = s->first, * e2 = s->last;
-    printf ("%.2f %s %.2f %.2f\n",
-      ratio (e1->tim, e2->tim), s->name, e1->tim, e2->tim);
+    int r1 = (e1->res == 10 || e1->res == 20);
+    int r2 = (e2->res == 10 || e2->res == 20);
+    double t1, t2;
+    if (usereal)
+      {
+	t1 = r1 ? e1->wll : e1->zummary->rlim;
+	t2 = r2 ? e2->wll : e2->zummary->rlim;
+      }
+    else
+      {
+	t1 = r1 ? e1->tim : e1->zummary->tlim;
+	t2 = r2 ? e2->tim : e2->zummary->tlim;
+      }
+    printf ("%.2f %s %.2f %.2f\n", ratio (t1, t2), s->name, t1, t2);
   }
   free (a);
 }
