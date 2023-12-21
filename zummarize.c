@@ -50,7 +50,7 @@ typedef struct Order {
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
 static int nowarnings, satonly, unsatonly, deeponly, just, center;
 static const char * title, * outputpath;
-static int solved, unsolved, cmp, filter;
+static int solved, unsolved, cmp, filter, nounknown;
 static int plotting, cactus, cdf;
 
 static Zummary ** zummaries;
@@ -2101,6 +2101,8 @@ static void compare () {
     if (satonly && e2->res == 20) continue;
     if (unsatonly && e1->res == 10) continue;
     if (unsatonly && e2->res == 10) continue;
+    if (nounknown && e1->unk) continue;
+    if (nounknown && e2->unk) continue;
     if (filter && r1 + r2 != 1) continue;
     if (!filter && r1 + r2 == 0) continue;
     a[n++] = s;
@@ -2431,6 +2433,7 @@ int main (int argc, char ** argv) {
       solved = 1;
     } else if (!strcmp (argv[i], "--cmp")) cmp = 1;
     else if (!strcmp (argv[i], "--filter")) filter = 1;
+    else if (!strcmp (argv[i], "--no-unknown")) nounknown = 1;
     else if (!strcmp (argv[i], "--unsolved")) {
       if (unsolved) die ("'--unsolved' specified twice");
       if (solved)
