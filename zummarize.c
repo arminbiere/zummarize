@@ -222,6 +222,7 @@ static const char * USAGE =
 "--unsolved     print unsolved (never solved) instances\n"
 "--solved       print all at least once solved instances\n"
 "--filter       filter out solved in comparison\n"
+"--no-unknown   filter out unknown results in comparison\n"
 "--cmp          compare two runs\n"
 "\n"
 "--par<x>       use PAR<X> score\n"
