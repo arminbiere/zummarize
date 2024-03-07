@@ -2566,7 +2566,7 @@ static void plot() {
 	fprintf(rscriptfile, "c(");
       if (deeponly) {
 	int b = e->bnd > capped ? capped : e->bnd;
-#if 1
+#if 0
 	fprintf(rscriptfile, "%d", b);
 #else
 	double s = capped - capped / (b + 2.0);
