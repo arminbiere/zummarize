@@ -2610,7 +2610,7 @@ static void plot() {
 		(xmin < 0 ? 0 : xmin), pxmax,
 		(ymin < 0 ? 0 : ymin), pymax,
 		title ? title : "", logy ? ",log=\"y\"" : "");
-#if 1
+#if 0
 	fprintf(rscriptfile, "abline (%.0f, 0,lty=3)\n",
 		usereal ? z->rlim : z->tlim);
 #endif
