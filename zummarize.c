@@ -2885,7 +2885,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(arg, "--patch")) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
-      patch = arg;
+      patch = argv[i];
     } else if (!strcmp(arg, "--filter"))
       filter = 1;
     else if (!strcmp(arg, "--no-unknown"))
