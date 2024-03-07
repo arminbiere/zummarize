@@ -52,6 +52,7 @@ static int solved, unsolved, cmp, filter, nounknown;
 static int plotting, cactus, cdf;
 
 static int xmin = -1, xmax = -1, ymin = -1, ymax = -1;
+static int limit = -1;
 
 static const char *title, *outputpath;
 
@@ -242,6 +243,7 @@ static const char *USAGE =
     "--xmin <x>     minimum X value\n"
     "--ymax <y>     maximum Y value\n"
     "--xmax <x>     maximum X value\n"
+    "--limit <y>    limit line\n"
     "\n"
     "--par<x>       use PAR<X> score\n"
     "\n"
@@ -2607,13 +2609,12 @@ static void plot() {
 		"c(%d,%.2f),"
 		"c(%d,%d),"
 		"col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-		(xmin < 0 ? 0 : xmin), pxmax,
-		(ymin < 0 ? 0 : ymin), pymax,
+		(xmin < 0 ? 0 : xmin), pxmax, (ymin < 0 ? 0 : ymin), pymax,
 		title ? title : "", logy ? ",log=\"y\"" : "");
-#if 0
-	fprintf(rscriptfile, "abline (%.0f, 0,lty=3)\n",
-		usereal ? z->rlim : z->tlim);
-#endif
+
+	if (limit >= 0)
+	  fprintf(rscriptfile, "abline(h=%d,col=\"blue\")\n", limit);
+
       } else {
 	fprintf(rscriptfile,
 		"plot (c(0,%d+10),c(0,%.2f+%.2f),"
@@ -2863,6 +2864,11 @@ int main(int argc, char **argv) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
       if ((xmax = atoi(argv[i])) < 0)
+	die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--limit")) {
+      if (++i == argc)
+	die("argument to '%s' missing", arg);
+      if ((limit = atoi(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--filter"))
       filter = 1;
