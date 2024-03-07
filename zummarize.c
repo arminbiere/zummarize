@@ -54,6 +54,8 @@ static int plotting, cactus, cdf;
 static int xmin = -1, xmax = -1, ymin = -1, ymax = -1;
 static int limit = -1;
 
+static const char *patch;
+
 static const char *title, *outputpath;
 
 static Zummary **zummaries;
@@ -244,6 +246,7 @@ static const char *USAGE =
     "--ymax <y>     maximum Y value\n"
     "--xmax <x>     maximum X value\n"
     "--limit <y>    limit line\n"
+    "--patch <file> add these commands after 'plot'\n"
     "\n"
     "--par<x>       use PAR<X> score\n"
     "\n"
@@ -2615,6 +2618,15 @@ static void plot() {
 	if (limit >= 0)
 	  fprintf(rscriptfile, "abline(h=%d,col=\"blue\")\n", limit);
 
+	if (patch) {
+	  FILE *patchfile = fopen(patch, "r");
+	  int ch;
+	  if (!patchfile)
+	    die("can not read patch file '%s'", patch);
+	  while ((ch = getc(patchfile)) != EOF)
+	    fputc(ch, rscriptfile);
+	  fclose(patchfile);
+	}
       } else {
 	fprintf(rscriptfile,
 		"plot (c(0,%d+10),c(0,%.2f+%.2f),"
@@ -2870,6 +2882,10 @@ int main(int argc, char **argv) {
 	die("argument to '%s' missing", arg);
       if ((limit = atoi(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--patch")) {
+      if (++i == argc)
+	die("argument to '%s' missing", arg);
+      patch = arg;
     } else if (!strcmp(arg, "--filter"))
       filter = 1;
     else if (!strcmp(arg, "--no-unknown"))
