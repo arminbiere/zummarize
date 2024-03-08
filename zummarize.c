@@ -2602,7 +2602,7 @@ static void plot() {
 	  pxmax = (usereal ? z->rlim : z->tlim) +
 		  0.02 * (usereal ? z->rlim : z->tlim);
 	else
-	  pxmax = xmin;
+	  pxmax = xmax;
 	if (ymax < 0)
 	  pymax = z->sol + 10;
 	else
