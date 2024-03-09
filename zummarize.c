@@ -51,7 +51,7 @@ static int nowarnings, satonly, unsatonly, deeponly, just, center;
 static int solved, unsolved, cmp, filter, nounknown;
 static int plotting, cactus, cdf;
 
-static int xmin = -1, xmax = -1, ymin = -1, ymax = -1;
+static double xmin = -1, xmax = -1, ymin = -1, ymax = -1;
 static int limit = -1;
 
 static const char *patch;
@@ -2596,8 +2596,7 @@ static void plot() {
 		logy ? ",log=\"y\"" : "");
 	fprintf(rscriptfile, "abline (%d, 0,lty=3)\n", capped);
       } else if (cdf) {
-	double pxmax;
-	int pymax;
+	double pxmax, pymax;
 	if (xmax < 0)
 	  pxmax = (usereal ? z->rlim : z->tlim) +
 		  0.02 * (usereal ? z->rlim : z->tlim);
@@ -2609,8 +2608,8 @@ static void plot() {
 	  pymax = ymax;
 	fprintf(rscriptfile,
 		"plot ("
-		"c(%d,%.2f),"
-		"c(%d,%d),"
+		"c(%.2f,%.2f),"
+		"c(%.2f,%.2f),"
 		"col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
 		(xmin < 0 ? 0 : xmin), pxmax, (ymin < 0 ? 0 : ymin), pymax,
 		title ? title : "", logy ? ",log=\"y\"" : "");
@@ -2860,22 +2859,22 @@ int main(int argc, char **argv) {
     else if (!strcmp(arg, "--ymin")) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
-      if ((ymin = atoi(argv[i])) < 0)
+      if ((ymin = atof(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--xmin")) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
-      if ((xmin = atoi(argv[i])) < 0)
+      if ((xmin = atof(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--ymax")) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
-      if ((ymax = atoi(argv[i])) < 0)
+      if ((ymax = atof(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--xmax")) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
-      if ((xmax = atoi(argv[i])) < 0)
+      if ((xmax = atof(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--limit")) {
       if (++i == argc)
