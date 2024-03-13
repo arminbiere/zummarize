@@ -2670,7 +2670,7 @@ static void plot() {
       fputc(',', rscriptfile);
     fprintf(rscriptfile, "\"%s\"", z->path + skip);
   }
-  fprintf(rscriptfile, "),col=m,pch=m,cex=0.8)\n");
+  fprintf(rscriptfile, "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
   fprintf(rscriptfile, "dev.off ()\n");
   fclose(rscriptfile);
   sprintf(cmd, "Rscript %s\n", rscriptpath);
