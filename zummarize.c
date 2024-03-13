@@ -77,6 +77,8 @@ static const char *orderpath;
 static Order *order;
 static int norder;
 
+static int forcereal;
+static int forcetime;
 static int usereal;
 
 static int capped = 1000;
@@ -257,6 +259,9 @@ static const char *USAGE =
     "\n"
     "--no-write     do not write generated zummaries\n"
     "--no-bounds    do not print bounds\n"
+    "\n"
+    "--force-real   force real time zummaries\n"
+    "--force-time   force process time zummaries\n"
     "\n"
     "The directory arguments are considered to have '.err' files generated\n"
     "by the 'runlim' tool and '.log' files which adhere loosly to the output\n"
@@ -1976,7 +1981,21 @@ static void checklimits() {
       wrn("different space limit in '%s' and '%s'", y->path, z->path);
   }
   msg(1, "all zummaries have the same time and space limits");
-  if (y->tlim >= y->rlim) {
+  if (forcereal) {
+    msg(1, "forced zummarizing over real time (not process time)");
+    usereal = 1;
+    for (i = 0; i != nzummaries; i++) {
+      z = zummaries[i];
+      z->rlim = z->tlim;
+    }
+  } else if (forcetime) {
+    msg(1, "forced zummarizing over process time (not real time)");
+    usereal = 0;
+    for (i = 0; i != nzummaries; i++) {
+      z = zummaries[i];
+      z->tlim = z->rlim;
+    }
+  } else if (y->tlim >= y->rlim) {
     msg(1, "zummarizing over real time (not process time)");
     usereal = 1;
   } else {
@@ -2670,7 +2689,8 @@ static void plot() {
       fputc(',', rscriptfile);
     fprintf(rscriptfile, "\"%s\"", z->path + skip);
   }
-  fprintf(rscriptfile, "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
+  fprintf(rscriptfile,
+	  "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
   fprintf(rscriptfile, "dev.off ()\n");
   fclose(rscriptfile);
   sprintf(cmd, "Rscript %s\n", rscriptpath);
@@ -2917,6 +2937,10 @@ int main(int argc, char **argv) {
       nowrite = 1;
     else if (!strcmp(arg, "--no-bounds"))
       nobounds = 1;
+    else if (!strcmp(arg, "--force-real"))
+      forcereal = 1;
+    else if (!strcmp(arg, "--force-time"))
+      forcetime = 1;
     else if (!strcmp(arg, "--update")) {
       if (system("./update.sh"))
 	die("calling './update.sh' failed");
