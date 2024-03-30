@@ -52,7 +52,7 @@ static int solved, unsolved, cmp, filter, nounknown;
 static int plotting, cactus, cdf;
 
 static double xmin = -1, xmax = -1, ymin = -1, ymax = -1;
-static int limit = -1;
+static int limit = -1, forced_time_limit = -1, forced_real_limit = -1;
 
 static const char *patch;
 
@@ -1551,6 +1551,16 @@ static void fixzummary(Zummary *z, int zummary_mode) {
   z->fld = z->tio = z->meo = z->s11 = z->si6 = z->unk = 0;
   z->wll = z->tim = z->mem = z->max = 0;
   z->bnd = z->bst = z->unq = 0;
+  if (forced_real_limit >= 0 && z->rlim > forced_real_limit) {
+    msg(1, "replacing real time limit of '%s' by '%d'", z->path,
+	forced_real_limit);
+    z->rlim = forced_real_limit;
+  }
+  if (forced_time_limit >= 0 && z->tlim > forced_time_limit) {
+    msg(1, "replacing time limit of '%s' by '%d'", z->path,
+	forced_time_limit);
+    z->tlim = forced_time_limit;
+  }
   for (e = z->first; e; e = e->next) {
     if (e->res < 10)
       continue;
@@ -1602,14 +1612,14 @@ static void fixzummary(Zummary *z, int zummary_mode) {
       e->res = 5, z->s11++;
     else if (e->si6)
       e->res = 6, z->si6++;
-    else if (e->res == 10)
-      z->sat++;
-    else if (e->res == 20)
-      z->uns++;
     else if (e->tio)
       e->res = 1, z->tio++;
     else if (e->meo)
       e->res = 2, z->meo++;
+    else if (e->res == 10)
+      z->sat++;
+    else if (e->res == 20)
+      z->uns++;
     else
       e->unk = 1, e->res = 3, z->unk++;
     assert(e->res);
@@ -2900,6 +2910,16 @@ int main(int argc, char **argv) {
       if (++i == argc)
 	die("argument to '%s' missing", arg);
       if ((limit = atoi(argv[i])) < 0)
+	die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--forced-real-limit")) {
+      if (++i == argc)
+	die("argument to '%s' missing", arg);
+      if ((forced_real_limit = atoi(argv[i])) < 0)
+	die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--forced-time-limit")) {
+      if (++i == argc)
+	die("argument to '%s' missing", arg);
+      if ((forced_time_limit = atoi(argv[i])) < 0)
 	die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--patch")) {
       if (++i == argc)
