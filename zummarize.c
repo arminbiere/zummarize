@@ -2697,7 +2697,7 @@ static void plot() {
     c++;
     if (c > 1)
       fputc(',', rscriptfile);
-    fprintf(rscriptfile, "\"%s\"", z->path + skip);
+    fprintf(rscriptfile, "\"%d %s\"", z->sol, z->path + skip);
   }
   fprintf(rscriptfile,
 	  "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
