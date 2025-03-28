@@ -141,8 +141,11 @@ static void open_input(const char *path) {
   input.fd = open(path, O_RDONLY);
   if (input.fd == -1)
     die("failed to open '%s'", path);
-  input.start =
-      mmap(0, bytes, PROT_READ, MAP_PRIVATE | MAP_POPULATE, input.fd, 0);
+  int flags = MAP_PRIVATE;
+#ifndef __APPLE__
+  flags |= MAP_POPULATE;
+#endif
+  input.start = mmap(0, bytes, PROT_READ, flags, input.fd, 0);
   if (!input.start)
     die("failed to map '%s' to memory", path);
   msg(2, "memory mapped '%s' of size %ld", path, (long)bytes);
@@ -870,7 +873,7 @@ static int parserrfile(Entry *e, const char *errpath) {
   FOUND(TIME, "time:");
   FOUND(REAL, "real:");
   FOUND(SPACE, "space:");
-  assert(checked == MAX);
+  assert(checked == MAX), (void) checked;
   if (!res && !e->tio && !e->meo && !e->unk)
     e->unk = 1;
   return res;
