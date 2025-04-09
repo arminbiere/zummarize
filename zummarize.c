@@ -1086,6 +1086,8 @@ SEEN_S:
     goto SEEN_S_S;
   if (ch == 'U')
     goto SEEN_S_U;
+  if (ch == 'V')
+    goto SEEN_S_V;
   if (ch == 'O')
     goto SEEN_S_O;
   if (ch == '\n')
@@ -1278,6 +1280,47 @@ SEEN_S_U:
   if (ch != '\n')
     goto WAIT;
   this = "s UNSATISFIABLE";
+  goto UNSAT;
+SEEN_S_V:
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'E')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'R')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'I')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'F')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'I')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'E')
+    goto WAIT;
+  ch = nextch();
+  if (ch == '\n')
+    goto START;
+  if (ch != 'D')
+    goto WAIT;
+  ch = nextch();
+  if (ch != '\n')
+    goto WAIT;
+  this = "s VERIFIED";
   goto UNSAT;
 SEEN_S_O:
   ch = nextch();
