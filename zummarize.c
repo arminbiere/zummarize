@@ -53,6 +53,7 @@ static int plotting, cactus, cdf;
 
 static double xmin = -1, xmax = -1, ymin = -1, ymax = -1;
 static int limit = -1, forced_time_limit = -1, forced_real_limit = -1;
+static double xlegend = -1, ylegend = -1;
 
 static const char *patch;
 
@@ -250,6 +251,8 @@ static const char *USAGE =
     "--xmin <x>     minimum X value\n"
     "--ymax <y>     maximum Y value\n"
     "--xmax <x>     maximum X value\n"
+    "--xlegend <x>  legend X value\n"
+    "--ylegend <y>  legend Y value\n"
     "--limit <y>    limit line\n"
     "--patch <file> add these commands after 'plot'\n"
     "\n"
@@ -347,7 +350,7 @@ static void pushtoken(int ch) {
     if ((delta = token - oldtoken)) {
       int i;
       for (i = 0; i < ntokens; i++)
-	tokens[i] += delta;
+        tokens[i] += delta;
     }
   }
   if (ntoken == INT_MAX)
@@ -372,7 +375,7 @@ static int pusherrtokens() {
     int ch;
     while ((ch = nextch()) != '\n')
       if (ch == EOF)
-	break;
+        break;
     if (ch == '\n')
       lineno++;
     ntokens = ntoken = stoken = 0;
@@ -408,7 +411,7 @@ static int parserrline() {
     if (ch == ' ' || ch == '\t' || ch == '\r') {
       assert(ntokens < 5 || ntoken == stoken);
       if (stoken < ntoken && !pusherrtokens())
-	break;
+        break;
       continue;
     }
     if (ntokens < 5)
@@ -457,7 +460,7 @@ static int parsezummaryline() {
     }
     if (ch == ' ' || ch == '\t' || ch == '\r') {
       if (stoken < ntoken)
-	pushzummarytokens();
+        pushzummarytokens();
       continue;
     }
     pushtoken(ch);
@@ -563,21 +566,21 @@ static int zummaryneedsupdate(Zummary *z, const char *path) {
       char *errpath = appendpath(z->path, errname);
       double etime;
       if (getmtime(errpath, &etime)) {
-	if (etime <= ztime) {
-	  double ltime;
-	  if (getmtime(logpath, &ltime)) {
-	    if (ltime > ztime) {
-	      msg(1, "log file '%s' more recently modified", logpath);
-	      res = 1;
-	    }
-	  } else
-	    res = 1;
-	} else {
-	  msg(1, "error file '%s' more recently modified", errpath);
-	  res = 1;
-	}
+        if (etime <= ztime) {
+          double ltime;
+          if (getmtime(logpath, &ltime)) {
+            if (ltime > ztime) {
+              msg(1, "log file '%s' more recently modified", logpath);
+              res = 1;
+            }
+          } else
+            res = 1;
+        } else {
+          msg(1, "error file '%s' more recently modified", errpath);
+          res = 1;
+        }
       } else
-	res = 1;
+        res = 1;
     } else
       msg(1, "missing '%s'", logpath);
     free(logpath);
@@ -702,164 +705,164 @@ static int parserrfile(Entry *e, const char *errpath) {
       continue;
     assert(!strcmp(tokens[0], "[run]") || !strcmp(tokens[0], "[runlim]"));
     if (ntokens > 3 && !strcmp(tokens[1], "time") &&
-	!strcmp(tokens[2], "limit:")) {
+        !strcmp(tokens[2], "limit:")) {
       double tlim = atof(tokens[3]);
       msg(2, "found time limit '%.0f' in '%s'", tlim, errpath);
       if (found[TLIM]) {
-	msg(1, "error file '%s' contains two 'time limit:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'time limit:' lines", errpath);
+        res = 0;
       } else {
-	found[TLIM] = 1;
-	if (tlim <= 0) {
-	  msg(1, "error file '%s' with invalid time limit '%.0f'", errpath,
-	      tlim);
-	  res = 0;
-	} else if (e->zummary->tlim < 0) {
-	  msg(1, "assuming time limit '%.0f'", tlim);
-	  e->zummary->tlim = tlim;
-	} else if (e->zummary->tlim != tlim) {
-	  msg(1, "error file '%s' with different time limit '%.0f'", errpath,
-	      tlim);
-	  res = 0;
-	}
+        found[TLIM] = 1;
+        if (tlim <= 0) {
+          msg(1, "error file '%s' with invalid time limit '%.0f'", errpath,
+              tlim);
+          res = 0;
+        } else if (e->zummary->tlim < 0) {
+          msg(1, "assuming time limit '%.0f'", tlim);
+          e->zummary->tlim = tlim;
+        } else if (e->zummary->tlim != tlim) {
+          msg(1, "error file '%s' with different time limit '%.0f'", errpath,
+              tlim);
+          res = 0;
+        }
       }
     } else if (ntokens > 4 && !strcmp(tokens[1], "real") &&
-	       !strcmp(tokens[2], "time") && !strcmp(tokens[3], "limit:")) {
+               !strcmp(tokens[2], "time") && !strcmp(tokens[3], "limit:")) {
       double rlim = atof(tokens[4]);
       msg(2, "found real time limit '%.0f' in '%s'", rlim, errpath);
       if (found[RLIM]) {
-	msg(1, "error file '%s' contains two 'real time limit:' lines",
-	    errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'real time limit:' lines",
+            errpath);
+        res = 0;
       } else {
-	found[RLIM] = 1;
-	if (rlim <= 0) {
-	  msg(1, "error file '%s' with invalid real time limit '%.0f'", errpath,
-	      rlim);
-	  res = 0;
-	} else if (e->zummary->rlim < 0) {
-	  msg(1, "assuming real time limit '%.0f'", rlim);
-	  e->zummary->rlim = rlim;
-	} else if (e->zummary->rlim != rlim) {
-	  msg(1, "error file '%s' with different real time limit '%.0f'",
-	      errpath, rlim);
-	  res = 0;
-	}
+        found[RLIM] = 1;
+        if (rlim <= 0) {
+          msg(1, "error file '%s' with invalid real time limit '%.0f'", errpath,
+              rlim);
+          res = 0;
+        } else if (e->zummary->rlim < 0) {
+          msg(1, "assuming real time limit '%.0f'", rlim);
+          e->zummary->rlim = rlim;
+        } else if (e->zummary->rlim != rlim) {
+          msg(1, "error file '%s' with different real time limit '%.0f'",
+              errpath, rlim);
+          res = 0;
+        }
       }
     } else if (ntokens > 3 && !strcmp(tokens[1], "space") &&
-	       !strcmp(tokens[2], "limit:")) {
+               !strcmp(tokens[2], "limit:")) {
       double slim = atof(tokens[3]);
       msg(2, "found space limit '%.0f' in '%s'", slim, errpath);
       if (found[SLIM]) {
-	msg(1, "error file '%s' contains two 'space limit:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'space limit:' lines", errpath);
+        res = 0;
       } else {
-	found[SLIM] = 1;
-	if (slim <= 0) {
-	  msg(1, "error file '%s' with invalid space limit '%.0f'", errpath,
-	      slim);
-	  res = 0;
-	} else if (e->zummary->slim < 0) {
-	  msg(1, "assuming space limit '%.0f'", slim);
-	  e->zummary->slim = slim;
-	} else if (e->zummary->slim != slim) {
-	  msg(1, "error file '%s' with different space limit '%.0f'", errpath,
-	      slim);
-	  if (e->zummary->slim < slim) {
-	    msg(1, "increasing space limit to '%.0f'", slim);
-	    e->zummary->slim = slim;
-	  }
-	}
+        found[SLIM] = 1;
+        if (slim <= 0) {
+          msg(1, "error file '%s' with invalid space limit '%.0f'", errpath,
+              slim);
+          res = 0;
+        } else if (e->zummary->slim < 0) {
+          msg(1, "assuming space limit '%.0f'", slim);
+          e->zummary->slim = slim;
+        } else if (e->zummary->slim != slim) {
+          msg(1, "error file '%s' with different space limit '%.0f'", errpath,
+              slim);
+          if (e->zummary->slim < slim) {
+            msg(1, "increasing space limit to '%.0f'", slim);
+            e->zummary->slim = slim;
+          }
+        }
       }
     } else if (ntokens > 2 && !strcmp(tokens[1], "status:")) {
       if (found[STATUS]) {
-	msg(1, "error file '%s' contains two 'status:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'status:' lines", errpath);
+        res = 0;
       } else if (!strcmp(tokens[2], "ok")) {
-	msg(2, "found 'ok' status in '%s'", errpath);
-	found[STATUS] = 1;
+        msg(2, "found 'ok' status in '%s'", errpath);
+        found[STATUS] = 1;
       } else if (!strcmp(tokens[2], "signal(11)") ||
-		 (ntokens > 3 && !strcmp(tokens[2], "segmentation") &&
-		  !strcmp(tokens[3], "fault"))) {
-	msg(2, "found 'ok' status in '%s'", errpath);
-	found[STATUS] = 1;
-	e->s11 = 1;
+                 (ntokens > 3 && !strcmp(tokens[2], "segmentation") &&
+                  !strcmp(tokens[3], "fault"))) {
+        msg(2, "found 'ok' status in '%s'", errpath);
+        found[STATUS] = 1;
+        e->s11 = 1;
       } else if (!strcmp(tokens[2], "signal(6)")) {
-	msg(2, "found 'ok' status in '%s'", errpath);
-	found[STATUS] = 1;
-	e->si6 = 1;
+        msg(2, "found 'ok' status in '%s'", errpath);
+        found[STATUS] = 1;
+        e->si6 = 1;
       } else if (ntokens > 4 && !strcmp(tokens[2], "out") &&
-		 !strcmp(tokens[3], "of") && !strcmp(tokens[4], "time")) {
-	msg(2, "found 'out of time' status in '%s'", errpath);
-	found[STATUS] = 1;
-	e->tio = 1;
+                 !strcmp(tokens[3], "of") && !strcmp(tokens[4], "time")) {
+        msg(2, "found 'out of time' status in '%s'", errpath);
+        found[STATUS] = 1;
+        e->tio = 1;
       } else if (ntokens > 4 && !strcmp(tokens[2], "out") &&
-		 !strcmp(tokens[3], "of") && !strcmp(tokens[4], "memory")) {
-	msg(2, "found 'out of memory' status in '%s'", errpath);
-	found[STATUS] = 1;
-	e->meo = 1;
+                 !strcmp(tokens[3], "of") && !strcmp(tokens[4], "memory")) {
+        msg(2, "found 'out of memory' status in '%s'", errpath);
+        found[STATUS] = 1;
+        e->meo = 1;
       } else {
-	msg(1, "invalid status line in '%s'", errpath);
-	found[STATUS] = 1;
+        msg(1, "invalid status line in '%s'", errpath);
+        found[STATUS] = 1;
       }
     } else if (ntokens > 2 && !strcmp(tokens[1], "result:")) {
       if (found[RESULT]) {
-	msg(1, "error file '%s' contains two 'result:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'result:' lines", errpath);
+        res = 0;
       } else {
-	int result = atoi(tokens[2]);
-	found[RESULT] = 1;
-	if (!result) {
-	  msg(2, "found '0' result in '%s'", errpath);
-	} else if (result == 10) {
-	  msg(2, "found '10' (SAT) result in '%s'", errpath);
-	} else if (result == 20) {
-	  msg(2, "found '20' (UNSAT) result in '%s'", errpath);
-	} else {
-	  msg(2, "found invalid '%d' result in '%s'", result, errpath);
-	}
+        int result = atoi(tokens[2]);
+        found[RESULT] = 1;
+        if (!result) {
+          msg(2, "found '0' result in '%s'", errpath);
+        } else if (result == 10) {
+          msg(2, "found '10' (SAT) result in '%s'", errpath);
+        } else if (result == 20) {
+          msg(2, "found '20' (UNSAT) result in '%s'", errpath);
+        } else {
+          msg(2, "found invalid '%d' result in '%s'", result, errpath);
+        }
       }
     } else if (ntokens > 2 && !strcmp(tokens[1], "time:")) {
       double time = atof(tokens[2]);
       msg(2, "found time '%.2f' in '%s'", time, errpath);
       if (found[TIME]) {
-	msg(1, "error file '%s' contains two 'time:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'time:' lines", errpath);
+        res = 0;
       } else {
-	found[TIME] = 1;
-	if (time < 0) {
-	  msg(1, "invalid time '%.2f' in '%s'", time, errpath);
-	  res = 0;
-	} else
-	  e->tim = time;
+        found[TIME] = 1;
+        if (time < 0) {
+          msg(1, "invalid time '%.2f' in '%s'", time, errpath);
+          res = 0;
+        } else
+          e->tim = time;
       }
     } else if (ntokens > 2 && !strcmp(tokens[1], "real:")) {
       double real = atof(tokens[2]);
       msg(2, "found real time '%.2f' in '%s'", real, errpath);
       if (found[REAL]) {
-	msg(1, "error file '%s' contains two 'real:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'real:' lines", errpath);
+        res = 0;
       } else {
-	found[REAL] = 1;
-	if (real < 0) {
-	  msg(1, "invalid real time '%.2f' in '%s'", real, errpath);
-	  res = 0;
-	} else
-	  e->wll = real;
+        found[REAL] = 1;
+        if (real < 0) {
+          msg(1, "invalid real time '%.2f' in '%s'", real, errpath);
+          res = 0;
+        } else
+          e->wll = real;
       }
     } else if (ntokens > 2 && !strcmp(tokens[1], "space:")) {
       double space = atof(tokens[2]);
       msg(2, "found space '%.1f' in '%s'", space, errpath);
       if (found[SPACE]) {
-	msg(1, "error file '%s' contains two 'space:' lines", errpath);
-	res = 0;
+        msg(1, "error file '%s' contains two 'space:' lines", errpath);
+        res = 0;
       } else {
-	found[SPACE] = 1;
-	if (space < 0) {
-	  msg(1, "invalid space '%.1f' in '%s'", space, errpath);
-	  res = 0;
-	} else
-	  e->mem = space;
+        found[SPACE] = 1;
+        if (space < 0) {
+          msg(1, "invalid space '%.1f' in '%s'", space, errpath);
+          res = 0;
+        } else
+          e->mem = space;
       }
     }
   }
@@ -873,7 +876,7 @@ static int parserrfile(Entry *e, const char *errpath) {
   FOUND(TIME, "time:");
   FOUND(REAL, "real:");
   FOUND(SPACE, "space:");
-  assert(checked == MAX), (void) checked;
+  assert(checked == MAX), (void)checked;
   if (!res && !e->tio && !e->meo && !e->unk)
     e->unk = 1;
   return res;
@@ -946,7 +949,7 @@ static long getposlong(int ch) {
 
 static void setubndbroken(Entry *e, int broken_level) {
   assert(broken_level == UBND_LOCALLY_BROKEN ||
-	 broken_level == UBND_GLOBALLY_BROKEN);
+         broken_level == UBND_GLOBALLY_BROKEN);
   if (e->zummary->ubndbroken >= broken_level)
     return;
   wrn("assuming 'u...' lines are %s broken in '%s'",
@@ -1005,7 +1008,7 @@ RESULT:
       die("two different results '%s' and '%s' in '%s'", other, this, logpath);
     else
       wrn("two (identical) results '%s' and '%s' in '%s'", other, this,
-	  logpath);
+          logpath);
   }
   other = this;
   goto START;
@@ -1019,7 +1022,7 @@ START_OF_WITNESS:
   if (ch == 'c') {
     while ((ch = nextch()) != '\n')
       if (ch == EOF)
-	goto INVALID_WITNESS_SAVECH;
+        goto INVALID_WITNESS_SAVECH;
     goto START_OF_WITNESS;
   }
   if (ch != 'b' && ch != 'j')
@@ -1538,7 +1541,7 @@ DONE:
 
   if (e->minsbnd >= 0 && e->minsbnd <= e->maxubnd) {
     wrn("minimum sat-bound %d <= maximum unsat-bound %d in '%s'", e->minsbnd,
-	e->maxubnd, logpath);
+        e->maxubnd, logpath);
     wrn("ignoring maximum unsat-bound %d in '%s'", e->maxubnd, logpath);
     e->maxubnd = -1;
     setubndbroken(e, UBND_LOCALLY_BROKEN);
@@ -1546,12 +1549,12 @@ DONE:
 
   if (e->minsbnd >= 0 && e->res == 20)
     die("minimum sat-bound %d and with unsat result line in '%s'", e->minsbnd,
-	logpath);
+        logpath);
 
   if (e->minsbnd >= 0 && e->res != 10) {
     assert(!e->res);
     wrn("minimum sat-bound %d and no result line found in '%s' (forcing sat)",
-	e->minsbnd, logpath);
+        e->minsbnd, logpath);
     e->res = 10;
   }
 
@@ -1599,12 +1602,11 @@ static void fixzummary(Zummary *z, int zummary_mode) {
   z->bnd = z->bst = z->unq = 0;
   if (forced_real_limit >= 0 && z->rlim > forced_real_limit) {
     msg(1, "replacing real time limit of '%s' by '%d'", z->path,
-	forced_real_limit);
+        forced_real_limit);
     z->rlim = forced_real_limit;
   }
   if (forced_time_limit >= 0 && z->tlim > forced_time_limit) {
-    msg(1, "replacing time limit of '%s' by '%d'", z->path,
-	forced_time_limit);
+    msg(1, "replacing time limit of '%s' by '%d'", z->path, forced_time_limit);
     z->tlim = forced_time_limit;
   }
   for (e = z->first; e; e = e->next) {
@@ -1613,41 +1615,41 @@ static void fixzummary(Zummary *z, int zummary_mode) {
     assert(e->res == 10 || e->res == 20);
     if (!e->tio && e->tim > z->tlim) {
       msg(1, "error file '%s/%s.err' actually exceeds time limit", z->path,
-	  e->name);
+          e->name);
       e->tio = 1;
     } else if (!e->tio && e->wll > z->rlim) {
       msg(1, "error file '%s/%s.err' actually exceeds real time limit", z->path,
-	  e->name);
+          e->name);
       e->tio = 1;
     } else if (!e->meo && e->mem > z->slim) {
       msg(1, "error file '%s/%s.err' actually exceeds space limit", z->path,
-	  e->name);
+          e->name);
       e->meo = 1;
     }
   }
   for (e = z->first; e; e = e->next) {
     if (zummary_mode == GLOBAL_ZUMMARY_HAVE_BEST) {
       if (satonly && (!e->best || e->best->res != 10))
-	continue;
+        continue;
       if (unsatonly && (!e->best || e->best->res != 20))
-	continue;
+        continue;
       if (deeponly) {
-	if (e->best) {
-	  if (e->best->res == 10)
-	    continue;
-	  if (e->best->res == 20)
-	    continue;
-	}
+        if (e->best) {
+          if (e->best->res == 10)
+            continue;
+          if (e->best->res == 20)
+            continue;
+        }
       }
       if (e->best == e || (e->best && !cmp_entry_better(e, e->best))) {
-	assert(!e->dis);
-	z->bst++;
-	assert((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
-	if ((e->res == 10 && e->symbol->sat == 1) ||
-	    (e->res == 20 && e->symbol->uns == 1)) {
-	  msg(2, "unique (SOTA) '%s/%s'", e->zummary->path, e->name);
-	  z->unq++;
-	}
+        assert(!e->dis);
+        z->bst++;
+        assert((e->symbol->sat > 0) + (e->symbol->uns > 0) < 2);
+        if ((e->res == 10 && e->symbol->sat == 1) ||
+            (e->res == 20 && e->symbol->uns == 1)) {
+          msg(2, "unique (SOTA) '%s/%s'", e->zummary->path, e->name);
+          z->unq++;
+        }
       }
     }
     z->cnt++;
@@ -1672,11 +1674,11 @@ static void fixzummary(Zummary *z, int zummary_mode) {
     if (e->res == 10 || e->res == 20) {
       z->tim += e->tim, z->wll += e->wll, z->mem += e->mem;
       if (e->mem > z->max)
-	z->max = e->mem;
+        z->max = e->mem;
     }
     if (z->ubndbroken && e->bnd >= 0 && e->res != 10) {
       if (z->ubndbroken == UBND_GLOBALLY_BROKEN)
-	assert(zummary_mode != LOCAL_ZUMMARY);
+        assert(zummary_mode != LOCAL_ZUMMARY);
       e->bnd = -1;
     }
     if (e->bnd >= 0 && e->res != 4)
@@ -1708,7 +1710,7 @@ static void loadzummary(Zummary *z, const char *path) {
       double tlim, rlim, slim;
       Entry *e;
       if (ntokens < 8 || ntokens > 9)
-	die("invalid line in '%s'", path);
+        die("invalid line in '%s'", path);
       e = newentry(z, tokens[0]);
       e->res = atoi(tokens[1]);
       e->tim = atof(tokens[2]);
@@ -1716,58 +1718,58 @@ static void loadzummary(Zummary *z, const char *path) {
       e->mem = atof(tokens[4]);
       tlim = atof(tokens[5]);
       if (tlim <= 0)
-	die("invalid time limit %.0f in '%s'", tlim, path);
+        die("invalid time limit %.0f in '%s'", tlim, path);
       if (z->tlim < 0) {
-	msg(1, "setting time limit of '%s' to %.0f", z->path, tlim);
-	z->tlim = tlim;
+        msg(1, "setting time limit of '%s' to %.0f", z->path, tlim);
+        z->tlim = tlim;
       } else if (!ignore && z->tlim != tlim)
-	wrn("different time limit %.0f in '%s'", tlim, path);
+        wrn("different time limit %.0f in '%s'", tlim, path);
       rlim = atof(tokens[6]);
       if (rlim <= 0)
-	die("invalid real time limit %.0f in '%s'", rlim, path);
+        die("invalid real time limit %.0f in '%s'", rlim, path);
       if (z->rlim < 0) {
-	msg(1, "setting real time limit of '%s' to %.0f", z->path, rlim);
-	z->rlim = rlim;
+        msg(1, "setting real time limit of '%s' to %.0f", z->path, rlim);
+        z->rlim = rlim;
       } else if (!ignore && z->rlim != rlim)
-	wrn("different real time limit %.0f in '%s'", rlim, path);
+        wrn("different real time limit %.0f in '%s'", rlim, path);
       slim = atof(tokens[7]);
       if (slim <= 0)
-	die("invalid space limit %.0f in '%s'", slim, path);
+        die("invalid space limit %.0f in '%s'", slim, path);
       if (z->slim < 0) {
-	msg(1, "setting space limit of '%s' to %.0f", z->path, slim);
-	z->slim = slim;
+        msg(1, "setting space limit of '%s' to %.0f", z->path, slim);
+        z->slim = slim;
       } else if (!ignore && z->slim != slim)
-	wrn("different space limit %.0f in '%s'", slim, path);
+        wrn("different space limit %.0f in '%s'", slim, path);
       if (ntokens < 9 || (e->bnd = atof(tokens[8])) < 0)
-	e->bnd = -1;
+        e->bnd = -1;
       if (ntokens == 9)
-	msg(2, "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d", e->name, e->res,
-	    e->tim, e->wll, e->mem, tlim, rlim, slim, e->bnd);
+        msg(2, "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f %d", e->name, e->res,
+            e->tim, e->wll, e->mem, tlim, rlim, slim, e->bnd);
       else
-	msg(2, "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f", e->name, e->res,
-	    e->tim, e->wll, e->mem, tlim, rlim, slim);
+        msg(2, "loaded %s %d %.2f %.2f %.1f %.2f %.2f %.1f", e->name, e->res,
+            e->tim, e->wll, e->mem, tlim, rlim, slim);
 
       if (e->res != 10 && e->res != 20) {
-	assert(e->res != 4);
-	if (e->res == 1)
-	  e->tio = 1;
-	if (e->res == 2)
-	  e->meo = 1;
-	else if (e->res == 3)
-	  e->unk = 1;
-	else if (e->res == 4)
-	  e->dis = 1; // TODO remove?
-	else if (e->res == 5)
-	  e->s11 = 1;
-	else if (e->res == 6)
-	  e->si6 = 1;
+        assert(e->res != 4);
+        if (e->res == 1)
+          e->tio = 1;
+        if (e->res == 2)
+          e->meo = 1;
+        else if (e->res == 3)
+          e->unk = 1;
+        else if (e->res == 4)
+          e->dis = 1; // TODO remove?
+        else if (e->res == 5)
+          e->s11 = 1;
+        else if (e->res == 6)
+          e->si6 = 1;
       }
 
     } else if (ntokens < 7 || ntokens > 8 || mystrcmp(tokens[0], "result") ||
-	       mystrcmp(tokens[1], "time") || mystrcmp(tokens[2], "real") ||
-	       mystrcmp(tokens[3], "space") || mystrcmp(tokens[4], "tlim") ||
-	       mystrcmp(tokens[5], "rlim") || mystrcmp(tokens[6], "slim") ||
-	       (ntokens == 8 && mystrcmp(tokens[7], "bound")))
+               mystrcmp(tokens[1], "time") || mystrcmp(tokens[2], "real") ||
+               mystrcmp(tokens[3], "space") || mystrcmp(tokens[4], "tlim") ||
+               mystrcmp(tokens[5], "rlim") || mystrcmp(tokens[6], "slim") ||
+               (ntokens == 8 && mystrcmp(tokens[7], "bound")))
       die("invalid header in '%s'", path);
     else
       first = 0;
@@ -1801,24 +1803,24 @@ static void updatezummary(Zummary *z) {
       e = newentry(z, base);
       assert(isfile(errpath));
       if (parserrfile(e, errpath))
-	parselogfile(e, logpath);
+        parselogfile(e, logpath);
       free(errpath);
       assert(!e->res || e->res == 10 || e->res == 20);
       if (e->tio && e->res)
-	wrn("result %d with time-out in '%s/%s'", e->res, z->path, base);
+        wrn("result %d with time-out in '%s/%s'", e->res, z->path, base);
       if (e->meo && e->res)
-	wrn("result %d with memory-out in '%s/%s'", e->res, z->path, base);
+        wrn("result %d with memory-out in '%s/%s'", e->res, z->path, base);
       if (e->s11 && e->res)
-	wrn("result %d with 'segmentation fault' in '%s/%s'", e->res, z->path,
-	    base);
+        wrn("result %d with 'segmentation fault' in '%s/%s'", e->res, z->path,
+            base);
       if (e->s11 && e->res)
-	wrn("result %d with 'segmentation fault' (s11) in '%s/%s'", e->res,
-	    z->path, base);
+        wrn("result %d with 'segmentation fault' (s11) in '%s/%s'", e->res,
+            z->path, base);
       if (e->si6 && e->res)
-	wrn("result %d with 'abort signal' (s6) in '%s/%s'", e->res, z->path,
-	    base);
+        wrn("result %d with 'abort signal' (s6) in '%s/%s'", e->res, z->path,
+            base);
       if (e->unk && e->res)
-	wrn("result %d and unknown status in '%s/%s'", e->res, z->path, base);
+        wrn("result %d and unknown status in '%s/%s'", e->res, z->path, base);
     } else
       msg(1, "missing '%s'", logpath);
     free(logpath);
@@ -1836,11 +1838,11 @@ static void updatezummary(Zummary *z) {
       die("no space limit in '%s'", z->path);
     if (nzummaries > 1 && z->cnt) {
       if (!ignore && z->tlim != zummaries[0]->tlim)
-	wrn("different time limit '%.0f' in '%s'", z->tlim, z->path);
+        wrn("different time limit '%.0f' in '%s'", z->tlim, z->path);
       if (!ignore && z->rlim != zummaries[0]->rlim)
-	wrn("different real time limit '%.0f' in '%s'", z->rlim, z->path);
+        wrn("different real time limit '%.0f' in '%s'", z->rlim, z->path);
       if (!ignore && z->slim != zummaries[0]->slim)
-	wrn("different space limit '%.0f' in '%s'", z->slim, z->path);
+        wrn("different space limit '%.0f' in '%s'", z->slim, z->path);
     }
   }
   sortzummary(z);
@@ -1861,7 +1863,7 @@ static void writezummary(Zummary *z, const char *path) {
   fputc('\n', file);
   for (e = z->first; e; e = e->next) {
     fprintf(file, "%s %d %.2f %.2f %.1f %.0f %.0f %.0f", e->name, e->res,
-	    e->tim, e->wll, e->mem, z->tlim, z->rlim, z->slim);
+            e->tim, e->wll, e->mem, z->tlim, z->rlim, z->slim);
     if (printbounds)
       fprintf(file, " %d", e->bnd);
     fputc('\n', file);
@@ -1928,9 +1930,9 @@ static void discrepancies() {
     for (e = s->first; e; e = e->chain) {
       assert(e->name == s->name);
       if (e->res == 10)
-	sat++;
+        sat++;
       if (e->res == 20)
-	unsat++;
+        unsat++;
     }
     if (!sat)
       continue;
@@ -1943,22 +1945,22 @@ static void discrepancies() {
     else
       expected = 0, cmp = '=';
     wrn("DISCREPANCY on '%s' with %d SAT %c %d UNSAT", s->name, sat, cmp,
-	unsat);
+        unsat);
     for (e = s->first; e; e = e->chain) {
       const char *suffix;
       if (e->res < 10)
-	continue;
+        continue;
       assert(e->res == 10 || e->res == 20);
       if (!expected)
-	suffix = " (tie so assumed wrong)";
+        suffix = " (tie so assumed wrong)";
       else if (e->res != expected)
-	suffix = " (overvoted so probably wrong)";
+        suffix = " (overvoted so probably wrong)";
       else
-	suffix = "";
+        suffix = "";
       wrn("%s %s/%s %s%s", (e->res == expected) ? " " : "!", e->zummary->path,
-	  s->name, (e->res == 10 ? "SAT" : "UNSAT"), suffix);
+          s->name, (e->res == 10 ? "SAT" : "UNSAT"), suffix);
       if (e->res != expected)
-	e->dis = 1;
+        e->dis = 1;
     }
     fflush(stdout);
     count++;
@@ -1973,30 +1975,30 @@ static void discrepancies() {
     Entry *e, *w = 0, *o1 = 0, *o2 = 0;
     for (e = s->first; e; e = e->chain) {
       if (e->dis)
-	continue;
+        continue;
       if (e->res != 10)
-	continue;
+        continue;
       if (w && e->bnd >= 0 && w->bnd > e->bnd)
-	w = e;
+        w = e;
       if (e->obnd >= 0) {
-	if (o1 && !o2 && o1->obnd != e->obnd)
-	  o2 = e;
-	if (!o1)
-	  o1 = e;
+        if (o1 && !o2 && o1->obnd != e->obnd)
+          o2 = e;
+        if (!o1)
+          o1 = e;
       }
     }
     if (w) {
       for (e = s->first; e; e = e->chain) {
-	if (e->dis)
-	  continue;
-	if (e->res == 10)
-	  continue;
-	assert(e->res != 20);
-	if (e->bnd < w->bnd)
-	  continue;
-	wrn("unsat-bound %d in '%s/%s' >= witness length %d in '%s/%s'", e->bnd,
-	    e->zummary->path, e->name, w->bnd, w->zummary->path, w->name);
-	setubndbroken(e, UBND_GLOBALLY_BROKEN);
+        if (e->dis)
+          continue;
+        if (e->res == 10)
+          continue;
+        assert(e->res != 20);
+        if (e->bnd < w->bnd)
+          continue;
+        wrn("unsat-bound %d in '%s/%s' >= witness length %d in '%s/%s'", e->bnd,
+            e->zummary->path, e->name, w->bnd, w->zummary->path, w->name);
+        setubndbroken(e, UBND_GLOBALLY_BROKEN);
       }
     }
     if (o1 && o2) {
@@ -2004,13 +2006,13 @@ static void discrepancies() {
       assert(o2->obnd >= 0);
       assert(o1->obnd != o2->obnd);
       wrn("optimum %ld in '%s/%s' does not match %ld in '%s/%s'", o1->obnd,
-	  o1->zummary->path, o1->name, o2->obnd, o2->zummary->path, o2->name);
+          o1->zummary->path, o1->name, o2->obnd, o2->zummary->path, o2->name);
       for (e = s->first; e; e = e->chain) {
-	if (e->dis)
-	  continue;
-	if (e->res != 10)
-	  continue;
-	e->dis = 1;
+        if (e->dis)
+          continue;
+        if (e->res != 10)
+          continue;
+        e->dis = 1;
       }
     }
   }
@@ -2093,19 +2095,19 @@ static void computedeep() {
     for (e = z->first; e; e = e->next) {
       double inc;
       if (e->dis)
-	continue;
+        continue;
       if ((aftercapping = e->bnd) < 0)
-	continue;
+        continue;
       if (e->symbol->sat)
-	continue;
+        continue;
       if (e->symbol->uns)
-	continue;
+        continue;
       if (aftercapping > capped)
-	aftercapping = capped;
+        aftercapping = capped;
       inc = 1e5 - 1e5 / (aftercapping + 2.0);
       z->deep += inc;
       msg(2, "unsat-bound %d capped to %d in '%s/%s' contributes %.0f", e->bnd,
-	  aftercapping, z->path, e->name, inc);
+          aftercapping, z->path, e->name, inc);
     }
     if (unsolved > 0)
       z->deep /= (double)unsolved;
@@ -2219,18 +2221,18 @@ static void findbest() {
     Entry *e, *best = 0;
     for (e = s->first; e; e = e->chain) {
       if (e->dis)
-	continue;
+        continue;
       if (cmp_entry_better(e, best) < 0)
-	best = e;
+        best = e;
       if (e->res == 10)
-	s->sat++;
+        s->sat++;
       if (e->res == 20)
-	s->uns++;
+        s->uns++;
     }
     if (best) {
       msg(2, "best result '%s/%s.log'", best->zummary->path, best->name);
       for (e = s->first; e; e = e->chain)
-	e->best = best;
+        e->best = best;
     } else
       msg(2, "no result for '%s'", s->name);
   }
@@ -2301,8 +2303,8 @@ static int skiprefixlength() {
     res = strlen(zummaries[0]->path);
     for (i = 1; i < nzummaries; i++) {
       for (j = 0; j < res; j++)
-	if (zummaries[i]->path[j] != zummaries[0]->path[j])
-	  break;
+        if (zummaries[i]->path[j] != zummaries[0]->path[j])
+          break;
       res = j;
       assert(res <= strlen(zummaries[i]->path));
     }
@@ -2595,10 +2597,10 @@ static void plot() {
     if (norder) {
       int j;
       for (j = 0; j < norder; j++)
-	if (!strcmp(z->path + skip, order[j].name))
-	  break;
+        if (!strcmp(z->path + skip, order[j].name))
+          break;
       if (j == norder)
-	die("order file '%s' does not contain '%s'", orderpath, z->path + skip);
+        die("order file '%s' does not contain '%s'", orderpath, z->path + skip);
       fprintf(rscriptfile, "%d", order[j].order);
     } else
       fprintf(rscriptfile, "%d", c);
@@ -2626,108 +2628,110 @@ static void plot() {
     for (e = z->first; e; e = e->next) {
       double t;
       if (!deeponly && e->res != 10 && e->res != 20)
-	continue;
+        continue;
       if (unsatonly && e->res != 20)
-	continue;
+        continue;
       if (satonly && e->res != 10)
-	continue;
+        continue;
       if (deeponly) {
-	if (e->bnd < 0)
-	  continue;
-	if (e->best && e->best->res == 10)
-	  continue;
-	if (e->best && e->best->res == 20)
-	  continue;
+        if (e->bnd < 0)
+          continue;
+        if (e->best && e->best->res == 10)
+          continue;
+        if (e->best && e->best->res == 20)
+          continue;
       }
       t = usereal ? e->wll : e->tim;
       if (printed++)
-	fprintf(rscriptfile, ",");
+        fprintf(rscriptfile, ",");
       else
-	fprintf(rscriptfile, "c(");
+        fprintf(rscriptfile, "c(");
       if (deeponly) {
-	int b = e->bnd > capped ? capped : e->bnd;
+        int b = e->bnd > capped ? capped : e->bnd;
 #if 0
 	fprintf(rscriptfile, "%d", b);
 #else
-	double s = capped - capped / (b + 2.0);
-	fprintf(rscriptfile, "%f", s);
+        double s = capped - capped / (b + 2.0);
+        fprintf(rscriptfile, "%f", s);
 #endif
       } else
-	fprintf(rscriptfile, "%.2f", t);
+        fprintf(rscriptfile, "%.2f", t);
     }
     fprintf(rscriptfile, ")\n");
     fprintf(rscriptfile, "z%d = sort (z%d)\n", c, c);
     if (c == 1) {
       if (title)
-	fprintf(rscriptfile, "par (mar=c(2.5,2.5,1.5,.5))\n");
+        fprintf(rscriptfile, "par (mar=c(2.5,2.5,1.5,.5))\n");
       else
-	fprintf(rscriptfile, "par (mar=c(2.5,2.5,.5,.5))\n");
+        fprintf(rscriptfile, "par (mar=c(2.5,2.5,.5,.5))\n");
 
       if (deeponly) {
-	fprintf(rscriptfile,
-		"plot (c(0,%d+10),c(0,%d+%d),"
-		"col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-		maxbnd, capped, (int)(capped * 0.02), title ? title : "",
-		logy ? ",log=\"y\"" : "");
-	fprintf(rscriptfile, "abline (%d, 0,lty=3)\n", capped);
+        fprintf(rscriptfile,
+                "plot (c(0,%d+10),c(0,%d+%d),"
+                "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+                maxbnd, capped, (int)(capped * 0.02), title ? title : "",
+                logy ? ",log=\"y\"" : "");
+        fprintf(rscriptfile, "abline (%d, 0,lty=3)\n", capped);
       } else if (cdf) {
-	double pxmax, pymax;
-	if (xmax < 0)
-	  pxmax = (usereal ? z->rlim : z->tlim) +
-		  0.02 * (usereal ? z->rlim : z->tlim);
-	else
-	  pxmax = xmax;
-	if (ymax < 0)
-	  pymax = z->sol + 10;
-	else
-	  pymax = ymax;
-	fprintf(rscriptfile,
-		"plot ("
-		"c(%.2f,%.2f),"
-		"c(%.2f,%.2f),"
-		"col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-		(xmin < 0 ? 0 : xmin), pxmax, (ymin < 0 ? 0 : ymin), pymax,
-		title ? title : "", logy ? ",log=\"y\"" : "");
+        double pxmax, pymax;
+        if (xmax < 0)
+          pxmax = (usereal ? z->rlim : z->tlim) +
+                  0.02 * (usereal ? z->rlim : z->tlim);
+        else
+          pxmax = xmax;
+        if (ymax < 0)
+          pymax = z->sol + 10;
+        else
+          pymax = ymax;
+        fprintf(rscriptfile,
+                "plot ("
+                "c(%.2f,%.2f),"
+                "c(%.2f,%.2f),"
+                "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+                (xmin < 0 ? 0 : xmin), pxmax, (ymin < 0 ? 0 : ymin), pymax,
+                title ? title : "", logy ? ",log=\"y\"" : "");
 
-	if (limit >= 0)
-	  fprintf(rscriptfile, "abline(h=%d,col=\"blue\")\n", limit);
+        if (limit >= 0)
+          fprintf(rscriptfile, "abline(h=%d,col=\"blue\")\n", limit);
 
-	if (patch) {
-	  FILE *patchfile = fopen(patch, "r");
-	  int ch;
-	  if (!patchfile)
-	    die("can not read patch file '%s'", patch);
-	  while ((ch = getc(patchfile)) != EOF)
-	    fputc(ch, rscriptfile);
-	  fclose(patchfile);
-	}
+        if (patch) {
+          FILE *patchfile = fopen(patch, "r");
+          int ch;
+          if (!patchfile)
+            die("can not read patch file '%s'", patch);
+          while ((ch = getc(patchfile)) != EOF)
+            fputc(ch, rscriptfile);
+          fclose(patchfile);
+        }
       } else {
-	fprintf(rscriptfile,
-		"plot (c(0,%d+10),c(0,%.2f+%.2f),"
-		"col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
-		z->sol, (usereal ? z->rlim : z->tlim),
-		0.02 * (usereal ? z->rlim : z->tlim), title ? title : "",
-		logy ? ",log=\"y\"" : "");
-	fprintf(rscriptfile, "abline (%.0f, 0,lty=3)\n",
-		usereal ? z->rlim : z->tlim);
+        fprintf(rscriptfile,
+                "plot (c(0,%d+10),c(0,%.2f+%.2f),"
+                "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
+                z->sol, (usereal ? z->rlim : z->tlim),
+                0.02 * (usereal ? z->rlim : z->tlim), title ? title : "",
+                logy ? ",log=\"y\"" : "");
+        fprintf(rscriptfile, "abline (%.0f, 0,lty=3)\n",
+                usereal ? z->rlim : z->tlim);
       }
     }
     if (cdf)
       fprintf(rscriptfile,
-	      "points (x=z%d,y=1:length(z%d),col=m[%d],pch=m[%d],type=\"o\")\n",
-	      c, c, c, c);
+              "points (x=z%d,y=1:length(z%d),col=m[%d],pch=m[%d],type=\"o\")\n",
+              c, c, c, c);
     else
       fprintf(rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c,
-	      c, c);
+              c, c);
   }
   if (nzummaries) {
     z = zummaries[0];
     if (center)
       fprintf(rscriptfile, "legend (x=\"%s\",legend=c(",
-	      cdf ? "right" : "left");
+              cdf ? "right" : "left");
+    else if (xlegend >= 0 && ylegend >= 0)
+      fprintf(rscriptfile, "legend (x=%g,y=%g,legend=c(", xlegend, ylegend);
     else
       fprintf(rscriptfile, "legend (x=\"%s\",legend=c(",
-	      cdf ? "bottomright" : "topleft");
+              cdf ? "bottomright" : "topleft");
   }
   c = 0;
   for (i = 0; i < nzummaries; i++) {
@@ -2746,7 +2750,7 @@ static void plot() {
     fprintf(rscriptfile, "\"%d %s\"", z->sol, z->path + skip);
   }
   fprintf(rscriptfile,
-	  "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
+          "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
   fprintf(rscriptfile, "dev.off ()\n");
   fclose(rscriptfile);
   sprintf(cmd, "Rscript %s\n", rscriptpath);
@@ -2772,12 +2776,12 @@ static void printmerged() {
     if (!i) {
       printf("benchmark");
       for (e = s->first; e; e = e->chain) {
-	printf(";solver");
-	printf(";status");
-	printf(";bound");
-	printf(";real");
-	printf(";time");
-	printf(";mem");
+        printf(";solver");
+        printf(";status");
+        printf(";bound");
+        printf(";real");
+        printf(";time");
+        printf(";mem");
       }
       printf("\n");
     }
@@ -2787,28 +2791,28 @@ static void printmerged() {
       assert(e->res != 4);
       switch (e->res) {
       case 1:
-	printf(";time");
-	break;
+        printf(";time");
+        break;
       case 2:
-	printf(";mem");
-	break;
+        printf(";mem");
+        break;
       case 5:
-	printf(";s11");
-	break;
+        printf(";s11");
+        break;
       case 6:
-	printf(";s6");
-	break;
+        printf(";s6");
+        break;
       case 10:
-	printf(";sat");
-	break;
+        printf(";sat");
+        break;
       case 20:
-	printf(";uns");
-	break;
+        printf(";uns");
+        break;
       default:
-	assert(e->res == 3);
+        assert(e->res == 3);
       case 3:
-	printf(";unk");
-	break;
+        printf(";unk");
+        break;
       }
       printf(";%d", e->bnd);
       printf(";%.02f", e->wll);
@@ -2856,7 +2860,7 @@ static void zummarizeall() {
     else {
       printzummaries();
       if (deeponly)
-	printdeep();
+        printdeep();
     }
   }
 }
@@ -2908,7 +2912,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(arg, "--cactus"))
       plotting = cactus = 1, cdf = 0;
     else if (!strcmp(arg, "--cdf") || !strcmp(arg, "--plotting") ||
-	     !strcmp(arg, "-c"))
+             !strcmp(arg, "-c"))
       plotting = cdf = 1, cactus = 0;
     else if (!strcmp(arg, "--log") || !strcmp(arg, "-l"))
       logy = 1;
@@ -2926,50 +2930,60 @@ int main(int argc, char **argv) {
       just = 1;
     else if (!strcmp(arg, "--solved")) {
       if (solved)
-	die("'--solved' specified twice");
+        die("'--solved' specified twice");
       if (unsolved)
-	die("can not combine '--unsolved' and '--solved'");
+        die("can not combine '--unsolved' and '--solved'");
       solved = 1;
     } else if (!strcmp(arg, "--cmp"))
       cmp = 1;
     else if (!strcmp(arg, "--ymin")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((ymin = atof(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--xmin")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((xmin = atof(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--ymax")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((ymax = atof(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--xmax")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((xmax = atof(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--xlegend")) {
+      if (++i == argc)
+        die("argument to '%s' missing", arg);
+      if ((xlegend = atof(argv[i])) < 0)
+        die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--ylegend")) {
+      if (++i == argc)
+        die("argument to '%s' missing", arg);
+      if ((ylegend = atof(argv[i])) < 0)
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--limit")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((limit = atoi(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--forced-real-limit")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((forced_real_limit = atoi(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--forced-time-limit")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       if ((forced_time_limit = atoi(argv[i])) < 0)
-	die("invalid '%s %s'", arg, argv[i]);
+        die("invalid '%s %s'", arg, argv[i]);
     } else if (!strcmp(arg, "--patch")) {
       if (++i == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       patch = argv[i];
     } else if (!strcmp(arg, "--filter"))
       filter = 1;
@@ -2977,27 +2991,27 @@ int main(int argc, char **argv) {
       nounknown = 1;
     else if (!strcmp(arg, "--unsolved")) {
       if (unsolved)
-	die("'--unsolved' specified twice");
+        die("'--unsolved' specified twice");
       if (solved)
-	die("can not combine '--solved' and '--unsolved'");
+        die("can not combine '--solved' and '--unsolved'");
       unsolved = 1;
     } else if (!strcmp(arg, "-o")) {
       if (outputpath)
-	die("multiple output paths specified");
+        die("multiple output paths specified");
       if (i + 1 == argc)
-	die("argument to '-o' missing");
+        die("argument to '-o' missing");
       outputpath = argv[++i];
     } else if (!strcmp(arg, "--title") || !strcmp(arg, "-t")) {
       if (title)
-	die("title multiply defined");
+        die("title multiply defined");
       if (i + 1 == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       title = argv[++i];
     } else if (!strcmp(arg, "--order")) {
       if (orderpath)
-	die("multiple '--order' options");
+        die("multiple '--order' options");
       if (i + 1 == argc)
-	die("argument to '%s' missing", arg);
+        die("argument to '%s' missing", arg);
       orderpath = argv[++i];
     } else if (!strcmp(arg, "--no-write"))
       nowrite = 1;
@@ -3009,12 +3023,12 @@ int main(int argc, char **argv) {
       forcetime = 1;
     else if (!strcmp(arg, "--update")) {
       if (system("./update.sh"))
-	die("calling './update.sh' failed");
+        die("calling './update.sh' failed");
     } else if (arg[0] == '-' && arg[1] == '-' && arg[2] == 'p' &&
-	       arg[3] == 'a' && arg[4] == 'r') {
+               arg[3] == 'a' && arg[4] == 'r') {
       if (!isdigit(arg[5]) || (arg[6] && !isdigit(arg[6])) ||
-	  (arg[6] && arg[7]))
-	die("expected one or two digits after '--par'");
+          (arg[6] && arg[7]))
+        die("expected one or two digits after '--par'");
       par = atoi(arg + 5);
     } else if (arg[0] == '-')
       die("invalid option '%s' (try '-h')", arg);
@@ -3055,7 +3069,7 @@ int main(int argc, char **argv) {
   for (i = 1; i < argc; i++) {
     const char *arg = argv[i];
     if (!strcmp(arg, "-t") || !strcmp(arg, "-o") || !strcmp(arg, "--title") ||
-	!strcmp(arg, "--order"))
+        !strcmp(arg, "--order"))
       i++;
     else if (arg[0] != '-' && isdir(arg))
       zummarizeone(argv[i]);
