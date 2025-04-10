@@ -49,7 +49,8 @@ typedef struct Order {
 static int verbose, force, ignore, printall, nowrite, nobounds, par;
 static int nowarnings, satonly, unsatonly, deeponly, just, center;
 static int solved, unsolved, cmp, filter, nounknown;
-static int plotting, cactus, cdf;
+static int plotting, cactus, cdf, show_solved;
+static double cex=0.8;
 
 static double xmin = -1, xmax = -1, ymin = -1, ymax = -1;
 static int limit = -1, forced_time_limit = -1, forced_real_limit = -1;
@@ -239,6 +240,7 @@ static const char *USAGE =
     "-c|--plot      print plot (default is 'CDF' not 'cactus')\n"
     "--cactus       generate classical SAT competition cactus plot\n"
     "--cdf          generate cumulative distribution function\n"
+    "--show-solved  show solved in legend of plot\n"
     "--center       center legend vertically\n"
     "-m|--merge     merge zummaries by benchmark\n"
     "-r|--rank      print number of times benchmark has been solved\n"
@@ -2714,6 +2716,17 @@ static void plot() {
                 usereal ? z->rlim : z->tlim);
       }
     }
+  }
+  for (i = nzummaries - 1; i >= 0; i--) {
+    z = zummaries[i];
+    if (!z->cnt)
+      continue;
+    if (satonly && !z->sat)
+      continue;
+    if (unsatonly && !z->uns)
+      continue;
+    if (deeponly && !z->deep)
+      continue;
     if (cdf)
       fprintf(rscriptfile,
               "points (x=z%d,y=1:length(z%d),col=m[%d],pch=m[%d],type=\"o\")\n",
@@ -2721,6 +2734,7 @@ static void plot() {
     else
       fprintf(rscriptfile, "points (z%d,col=m[%d],pch=m[%d],type=\"o\")\n", c,
               c, c);
+    c--;
   }
   if (nzummaries) {
     z = zummaries[0];
@@ -2747,10 +2761,14 @@ static void plot() {
     c++;
     if (c > 1)
       fputc(',', rscriptfile);
-    fprintf(rscriptfile, "\"%d %s\"", z->sol, z->path + skip);
+    fprintf(rscriptfile, "\"");
+    if (show_solved)
+      fprintf(rscriptfile,"%d  ", z->sol);
+    fprintf(rscriptfile, "%s", z->path + skip);
+    fputc ('"', rscriptfile);
   }
   fprintf(rscriptfile,
-          "),col=m,pch=m,cex=0.8,box.col=\"black\",bg=\"white\")\n");
+	  "),col=m,pch=m,cex=%g,box.col=\"black\",bg=\"white\")\n", cex);
   fprintf(rscriptfile, "dev.off ()\n");
   fclose(rscriptfile);
   sprintf(cmd, "Rscript %s\n", rscriptpath);
@@ -2916,6 +2934,8 @@ int main(int argc, char **argv) {
       plotting = cdf = 1, cactus = 0;
     else if (!strcmp(arg, "--log") || !strcmp(arg, "-l"))
       logy = 1;
+    else if (!strcmp(arg, "--show-solved"))
+      show_solved = 1;
     else if (!strcmp(arg, "--center"))
       center = 1;
     else if (!strcmp(arg, "--merge") || !strcmp(arg, "-m"))
@@ -2936,7 +2956,12 @@ int main(int argc, char **argv) {
       solved = 1;
     } else if (!strcmp(arg, "--cmp"))
       cmp = 1;
-    else if (!strcmp(arg, "--ymin")) {
+    else if (!strcmp(arg, "--cex")) {
+      if (++i == argc)
+	die("argument to '%s' missing", arg);
+      if ((cex = atof(argv[i])) <= 0)
+	die("invalid '%s %s'", arg, argv[i]);
+    } else if (!strcmp(arg, "--ymin")) {
       if (++i == argc)
         die("argument to '%s' missing", arg);
       if ((ymin = atof(argv[i])) < 0)
