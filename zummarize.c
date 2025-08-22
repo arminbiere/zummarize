@@ -84,7 +84,7 @@ static int forcetime;
 static int usereal;
 
 static int capped = 1000;
-static int logy;
+static int logarithmic;
 static int merge;
 static int rank;
 
@@ -2672,7 +2672,7 @@ static void plot() {
                 "plot (c(0,%d+10),c(0,%d+%d),"
                 "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
                 maxbnd, capped, (int)(capped * 0.02), title ? title : "",
-                logy ? ",log=\"y\"" : "");
+                !logarithmic ? "" : cdf ? ",log=\"x\"" : ",log=\"y\"");
         fprintf(rscriptfile, "abline (%d, 0,lty=3)\n", capped);
       } else if (cdf) {
         double pxmax, pymax;
@@ -2691,7 +2691,7 @@ static void plot() {
                 "c(%.2f,%.2f),"
                 "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
                 (xmin < 0 ? 0 : xmin), pxmax, (ymin < 0 ? 0 : ymin), pymax,
-                title ? title : "", logy ? ",log=\"y\"" : "");
+                title ? title : "", logarithmic ? ",log=\"y\"" : "");
 
         if (limit >= 0)
           fprintf(rscriptfile, "abline(h=%d,col=\"blue\")\n", limit);
@@ -2711,7 +2711,7 @@ static void plot() {
                 "col=0,xlab=\"\",ylab=\"\",main=\"%s\"%s)\n",
                 z->sol, (usereal ? z->rlim : z->tlim),
                 0.02 * (usereal ? z->rlim : z->tlim), title ? title : "",
-                logy ? ",log=\"y\"" : "");
+                logarithmic ? ",log=\"y\"" : "");
         fprintf(rscriptfile, "abline (%.0f, 0,lty=3)\n",
                 usereal ? z->rlim : z->tlim);
       }
@@ -2933,7 +2933,7 @@ int main(int argc, char **argv) {
              !strcmp(arg, "-c"))
       plotting = cdf = 1, cactus = 0;
     else if (!strcmp(arg, "--log") || !strcmp(arg, "-l"))
-      logy = 1;
+      logarithmic = 1;
     else if (!strcmp(arg, "--show-solved"))
       show_solved = 1;
     else if (!strcmp(arg, "--center"))
